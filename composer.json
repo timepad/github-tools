@@ -1,0 +1,11 @@
+{
+  "autoload": {
+      "psr-0": {
+          "TpReleaseNotes": "src"
+      }
+  },
+  "require": {
+      "knplabs/github-api": "~1.4",
+      "symfony/console": "~2"
+  }
+}
