@@ -65,4 +65,8 @@ class LocalGit {
 
         return $revs;
     }
+
+    function fetch() {
+        $this->command("git fetch");
+    }
 }

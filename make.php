@@ -42,6 +42,7 @@ $console
         $client->authenticate($token, Github\Client::AUTH_HTTP_TOKEN);
         
         $git = new LocalGit($repo);
+        $git->fetch();
         $tags = $git->tags();
         
         /**
