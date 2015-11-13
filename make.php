@@ -96,7 +96,7 @@ $console
         
             $cleanedTitle = preg_replace('!\\#\\d+!siu', '', $pull['title']);
         
-            $tagNotes[$tag->name]['pulls'][] = "* $cleanedTitle (#{$pull['number']}) by @{$pull['user']['login']}"; // user
+            $tagNotes[$tag->name]['pulls'][] = "* $cleanedTitle (#[{$pull['number']}]({$pull['html_url']}) by @{$pull['user']['login']})"; // user
         });
         
         uasort($tagNotes, function($a, $b) {
@@ -118,16 +118,16 @@ $console
                if ($tagData['date']) {
                    fwrite($log, "**Выпущена:** " . $tagData['date']->format('d.m.Y H:i') . " \n\n");
                }
-        
-               fwrite($log, "### Детальные изменения\n\n");
-        
-               foreach ($tagData['notes'] as $noteBlock) {
-                   fwrite($log, $noteBlock . "\n");
+
+               fwrite($log, "\n### Фичи\n\n");
+
+               foreach ($tagData['pulls'] as $pullInfo) {
+                   fwrite($log, $pullInfo . "\n");
                }
         
-               fwrite($log, "\n### Фичи\n\n");
+               fwrite($log, "\n### Детальные изменения\n\n");
         
-               foreach ($tagData['pulls'] as $noteBlock) {
+               foreach ($tagData['notes'] as $noteBlock) {
                    fwrite($log, $noteBlock . "\n");
                }
         
