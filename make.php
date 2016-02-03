@@ -23,6 +23,7 @@ $console
         new InputOption('github_token', null, InputOption::VALUE_REQUIRED, 'Github auth token'),
         new InputOption('github_user', null, InputOption::VALUE_REQUIRED, 'Github user/org'),
         new InputOption('github_repo', null, InputOption::VALUE_REQUIRED, 'Github repo'),
+        new InputOption('from_tag', null, InputOption::VALUE_OPTIONAL, 'Tag to start'),
         new InputOption('repo', null, InputOption::VALUE_REQUIRED, 'Local repo path'),
         new InputArgument('outfile', InputArgument::OPTIONAL, 'Target md file'),
     ])
@@ -33,6 +34,7 @@ $console
         $gh_repo = $input->getOption('github_repo');
         $repo = $input->getOption('repo');
         $outfile = $input->getArgument('outfile');
+        $from_tag = $input->getOption('from_tag');
 
         if (!$outfile) {
             $outfile = "./out/{$gh_user}_{$gh_repo}.md";
@@ -49,6 +51,8 @@ $console
          * @var Tag[]
          */
         $revTags = [];
+
+        $stopIteration = null;
         
         foreach ($tags as $i => $tag) {
             if (!isset($tags[$i+1])) {
@@ -67,15 +71,42 @@ $console
             foreach ($revList as $rev) {
                 $revTags[$rev] = $tag;
             }
+
+            if ($from_tag === $tag->name) {
+                $stopIteration = 20;
+                $output->writeln("Tag limited at {$tag->name}, will load $stopIteration more");
+                continue;
+            }
+
+            if ($stopIteration !== null) {
+                $stopIteration--;
+
+                if ($stopIteration <= 0) {
+                    $output->writeln("Tag limit reached");
+                    break;
+                }
+            }
         }
         
         $tagNotes = [];
+
+        $prFilter = [
+            'state' => 'closed',
+            'sort' => 'updated',
+            'direction' => 'desc'
+        ];
+
+        $stopIteration = null;
         
-        
-        Util::paginateAll($client, 'PullRequest', 'all', [$gh_user, $gh_repo, ['state' => 'closed']], function($pull) use (&$revTags, &$tagNotes, $output) {
-            if (!isset($revTags[$pull['head']['sha']])) {
-                $output->writeln("No tag for pull {$pull['number']}");
+        Util::paginateAll($client, 'PullRequest', 'all', [$gh_user, $gh_repo, $prFilter], function($pull) use (&$revTags, &$tagNotes, $output, &$stopIteration) {
+            if (!$pull['merged_at']) {
+                $output->writeln("{$pull['number']} was not merged, skipping");
                 return;
+            }
+
+            if (!isset($revTags[$pull['head']['sha']])) {
+                $output->writeln("{$pull['number']} has no matching tag, probably out of bounds. stopping");
+                return "stop";
             }
         
             $output->writeln("getting notes for pull {$pull['number']}");
@@ -111,6 +142,11 @@ $console
         
         foreach ($tagNotes as $tag => $tagData) {
            if (count($tagData['notes'])) {
+               if ($from_tag && ($tag < $from_tag)) {
+                   $output->writeln("Tag limited at {$from_tag}, skipping notes for tar $tag");
+                   continue;
+               }
+
                $output->writeln("Writing notes for tag {$tag}");
         
                fwrite($log, "## Версия $tag\n");
@@ -136,6 +172,58 @@ $console
         }
     })
 ;
+
+$console
+    ->register('make_stats')
+    ->setDefinition([
+        new InputOption('github_token', null, InputOption::VALUE_REQUIRED, 'Github auth token'),
+        new InputOption('github_user', null, InputOption::VALUE_REQUIRED, 'Github user/org'),
+        new InputOption('github_repos', null, InputOption::VALUE_REQUIRED | InputOption::VALUE_IS_ARRAY, 'Github repo'),
+        new InputOption('period', null, InputOption::VALUE_OPTIONAL, 'Date period', "-1month"),
+        new InputArgument('outfile', InputArgument::OPTIONAL, 'Target md file'),
+    ])
+    ->setDescription('Generates MD')
+    ->setCode(function (InputInterface $input, OutputInterface $output) {
+        $token = $input->getOption('github_token');
+        $gh_user = $input->getOption('github_user');
+        $gh_repos = $input->getOption('github_repos');
+        $period = $input->getOption('period');
+        $outfile = $input->getArgument('outfile');
+
+        if (!$outfile) {
+            $outfile = "./out/{$gh_user}_stats.md";
+        }
+
+        $log = fopen($outfile, 'w');
+
+        fwrite($log, "\n\n## Stats\n\n");
+
+        $client = new \Github\Client(new \Github\HttpClient\CachedHttpClient(array('cache_dir' => '/tmp/github-api-cache')));
+        $client->authenticate($token, Github\Client::AUTH_HTTP_TOKEN);
+
+
+        foreach ($gh_repos as $gh_repo) {
+            Util::paginateAll($client, "Issue\\Events", "all", [$gh_user, $gh_repo, []], function($event) use ($period, $gh_repo) {
+                TpReleaseNotes\Printable\IssueStory::store($event);
+                $date = date_create($event["created_at"]);
+
+                if ($date < date_create($period)) {
+                    return "stop";
+                }
+
+                echo "$gh_repo: parsing event {$event['id']}\n";
+            });
+        }
+
+        foreach (TpReleaseNotes\Printable\IssueStory::getStories() as $story) {
+            if ($story->isDone()) {
+                fwrite($log, $story->out());
+            }
+        }
+
+    })
+;
+
 
 $console->run();
 

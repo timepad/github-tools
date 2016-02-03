@@ -29,7 +29,11 @@ class Util {
         do {
             self::l("Processing page #$i of $api/$method", "debug");
             foreach ($block as $item) {
-                $callback($item);
+                $retCode = $callback($item);
+
+                if ($retCode == "stop") {
+                    break 2;
+                }
             }
 
             $block = $pager->fetchNext();
