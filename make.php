@@ -122,8 +122,15 @@ $console
                 ];
         
             }
+
+            $bodyLines = [];
+            foreach(preg_split("#[\n\r]+#u", $pull['body']) as $bodyLine) {
+                if (preg_match("#^[\\d*]\\.?\\s*\\[(new|bfx|ref)]\\[.]#siu", $bodyLine)) {
+                    $bodyLines[] = $bodyLine;
+                }
+            }
         
-            $tagNotes[$tag->name]['notes'][] = $pull['body'];
+            $tagNotes[$tag->name]['notes'][] = implode("\n", $bodyLines);
         
             $cleanedTitle = preg_replace('!\\#\\d+!siu', '', $pull['title']);
         
