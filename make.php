@@ -110,7 +110,7 @@ $console
 
                 if ($stopIteration > 3) {
                     $output->writeln("Stopping now");
-                return "stop";
+                    return "stop";
                 } else {
                     $output->writeln("Will try another PR");
                     return;
@@ -241,6 +241,53 @@ $console
     })
 ;
 
+
+$console
+    ->register('rebind_tags')
+    ->setDefinition([
+        new InputOption('repo', null, InputOption::VALUE_REQUIRED, 'Local repo path'),
+    ])
+    ->setDescription('Recreates tags')
+    ->setCode(function (InputInterface $input, OutputInterface $output) {
+        $repo = $input->getOption('repo');
+        $git = new LocalGit($repo);
+        $git->fetch();
+        $tags = $git->tags();
+
+
+        foreach ($tags as $i => $tag) {
+            echo "git tag -d {$tag->name}\n";
+            echo "GIT_COMMITTER_DATE=\"{$tag->date_raw}\" ";
+            echo "git tag -a {$tag->name} {$tag->ref} -m \"{$tag->name}\"\n";
+            echo "git push otp refs/tags/{$tag->name}\n\n";
+        }
+
+    })
+;
+
+$console
+    ->register('destroy_tags')
+    ->setDefinition(
+        [
+            new InputOption('repo', null, InputOption::VALUE_REQUIRED, 'Local repo path'),
+        ]
+    )
+    ->setDescription('Destroys all tags')
+    ->setCode(
+        function (InputInterface $input, OutputInterface $output) {
+            $repo = $input->getOption('repo');
+            $git  = new LocalGit($repo);
+            $git->fetch();
+            $tags = $git->tags();
+
+
+            foreach ($tags as $i => $tag) {
+                echo "git tag -d {$tag->name}\n";
+                echo "git push origin :refs/tags/{$tag->name}\n\n";
+            }
+
+        }
+    );
 
 $console->run();
 
