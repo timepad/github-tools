@@ -73,7 +73,7 @@ $console
             }
 
             if ($from_tag === $tag->name) {
-                $stopIteration = 20;
+                $stopIteration = 30;
                 $output->writeln("Tag limited at {$tag->name}, will load $stopIteration more");
                 continue;
             }
@@ -96,7 +96,7 @@ $console
             'direction' => 'desc'
         ];
 
-        $stopIteration = null;
+        $stopIteration = 0;
         
         Util::paginateAll($client, 'PullRequest', 'all', [$gh_user, $gh_repo, $prFilter], function($pull) use (&$revTags, &$tagNotes, $output, &$stopIteration) {
             if (!$pull['merged_at']) {
@@ -105,8 +105,16 @@ $console
             }
 
             if (!isset($revTags[$pull['head']['sha']])) {
-                $output->writeln("{$pull['number']} has no matching tag, probably out of bounds. stopping");
+                $output->writeln("{$pull['number']} has no matching tag, probably out of bounds");
+                $stopIteration++;
+
+                if ($stopIteration > 3) {
+                    $output->writeln("Stopping now");
                 return "stop";
+                } else {
+                    $output->writeln("Will try another PR");
+                    return;
+                }
             }
         
             $output->writeln("getting notes for pull {$pull['number']}");
@@ -125,7 +133,7 @@ $console
 
             $bodyLines = [];
             foreach(preg_split("#[\n\r]+#u", $pull['body']) as $bodyLine) {
-                if (preg_match("#^[\\d*]\\.?\\s*\\[(new|bfx|ref)]\\[.]#siu", $bodyLine)) {
+                if (preg_match("#^[\\d*]\\.?\\s*\\[(new|bfx|ref)]\\[.{1,2}]#siu", $bodyLine)) {
                     $bodyLines[] = $bodyLine;
                 }
             }
@@ -135,6 +143,8 @@ $console
             $cleanedTitle = preg_replace('!\\#\\d+!siu', '', $pull['title']);
         
             $tagNotes[$tag->name]['pulls'][] = "* $cleanedTitle (#[{$pull['number']}]({$pull['html_url']}) by @{$pull['user']['login']})"; // user
+
+            $stopIteration = 0;
         });
         
         uasort($tagNotes, function($a, $b) {
