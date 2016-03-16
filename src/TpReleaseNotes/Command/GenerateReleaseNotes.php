@@ -252,6 +252,10 @@ class GenerateReleaseNotes extends Command {
 
         }
 
+        $release_notes[] = "*****";
+        $release_notes[] = "*Это письмо написано роботами.*  ";
+        $release_notes[] = "**СЛАВА РОБОТАМ**";
+
         $release_notes = implode("\n", $release_notes);
 
         $mail_to = $input->getOption("mail_to");
