@@ -7,6 +7,8 @@ namespace TpReleaseNotes\Command;
 
 use Github\Client as GithubClient;
 use Github\HttpClient\CachedHttpClient;
+use Michelf\MarkdownExtra as Markdown;
+use Postmark\PostmarkClient;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;
@@ -26,7 +28,9 @@ class GenerateReleaseNotes extends Command {
                 new InputOption('from_tag', null, InputOption::VALUE_OPTIONAL, 'Tag to start'),
                 new InputOption('repo', null, InputOption::VALUE_REQUIRED, 'Local repo path'),
                 new InputOption('title', null, InputOption::VALUE_OPTIONAL, 'Project title'),
-                //new InputOption('mailto', null, InputOption::VALUE_OPTIONAL, 'Send release notes to Email'),
+                new InputOption('mail_to', null, InputOption::VALUE_OPTIONAL, 'Send release notes to Email'),
+                new InputOption('mail_from', null, InputOption::VALUE_OPTIONAL, 'From: email', "no-reply@timepad.ru"),
+                new InputOption('postmark_api', null, InputOption::VALUE_OPTIONAL, 'Postmark API key', "no-reply@timepad.ru"),
                 new InputArgument('outfile', InputArgument::OPTIONAL, 'Target md file'),
             ]
         )
@@ -151,7 +155,7 @@ class GenerateReleaseNotes extends Command {
 
             $cleanedTitle = preg_replace('!\\#\\d+!siu', '', $pull['title']);
 
-            $tagNotes[$tag->name]['pulls'][] = "* $cleanedTitle (#[{$pull['number']}]({$pull['html_url']}) by @{$pull['user']['login']})"; // user
+            $tagNotes[$tag->name]['pulls'][] = "* $cleanedTitle ([#{$pull['number']}]({$pull['html_url']}) by @{$pull['user']['login']})"; // user
 
             $stopIteration = 0;
         }
@@ -200,12 +204,12 @@ class GenerateReleaseNotes extends Command {
         $last_tag = $truncate_minor(array_pop(array_keys($tags_to_print)));
 
         if ($tags_count == 1) {
-            $subject = "# Релиз{$title_append} $first_tag";
+            $subject = "Релиз{$title_append} $first_tag";
         } else {
-            $subject = "# Релизы{$title_append} {$first_tag}-{$last_tag}";
+            $subject = "Релизы{$title_append} {$first_tag}-{$last_tag}";
         }
 
-        $release_notes[] = $subject;
+        $release_notes[] = "# $subject";
 
         foreach ($tags_to_print as $tag => $tagData) {
             $output->writeln("Writing notes for tag {$tag}");
@@ -215,7 +219,7 @@ class GenerateReleaseNotes extends Command {
             }
 
             if ($tagData['date']) {
-                $release_notes[] = "**Выпущена:** {$tagData['date']->format('d.m.Y H:i')}";
+                $release_notes[] = "*{$tagData['date']->format('d.m.Y H:i')}*";
             }
 
             $release_notes[] = "";
@@ -234,7 +238,28 @@ class GenerateReleaseNotes extends Command {
 
         }
 
-        file_put_contents($outfile, implode("\n", $release_notes));
+        $release_notes = implode("\n", $release_notes);
+
+        $mail_to = $input->getOption("mail_to");
+        if ($mail_to) {
+            $mail_from = $input->getOption("mail_from");
+            $postmark_api = $input->getOption("postmark_api");
+
+            if (!($mail_from && $postmark_api)) {
+                $output->writeln("Incomplete email config, no mails for u");
+            } else {
+                $output->writeln("Sending email {$mail_from} -> $mail_to");
+                $postmark = new PostmarkClient($postmark_api);
+
+                $stylesheet = file_get_contents("resources/markdown.css");
+                $transformed_md = Markdown::defaultTransform($release_notes);
+                $body = "<html><head><style>{$stylesheet}</style></head><body><div class='markdown-body'>$transformed_md</div></body>";
+
+                $postmark->sendEmail($mail_from, $mail_to, $subject, $body);
+            }
+        }
+
+        file_put_contents($outfile, $release_notes);
 
     }
 }

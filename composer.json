@@ -1,11 +1,13 @@
 {
   "autoload": {
-      "psr-0": {
-          "TpReleaseNotes": "src"
-      }
+    "psr-0": {
+      "TpReleaseNotes": "src"
+    }
   },
   "require": {
-      "knplabs/github-api": "~1.4",
-      "symfony/console": "~2"
+    "knplabs/github-api": "~1.4",
+    "symfony/console": "~2",
+    "wildbit/postmark-php": "dev-master",
+    "michelf/php-markdown": "~1.6.0"
   }
 }
