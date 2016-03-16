@@ -56,6 +56,30 @@ class GenerateReleaseNotes extends Command {
         $git->fetch();
         $tags = $git->tags();
 
+        $weight_tag = function($tag) {
+            preg_match("#(?'major'\\d+)(?:\\.(?'minor'\\d+)(?:\\.(?'patch'\\d+))?)?#siu", $tag, $matches);
+
+            $result = 0;
+            foreach (['patch', 'minor', 'major'] as $i => $part) {
+                $p = isset($matches[$part]) ? $matches[$part] : 0;
+                $result += pow(10000, $i) * +$p;
+            }
+
+            return $result;
+        };
+
+        $compare_tags = function($a, $b) use ($weight_tag) {
+
+            $a = $weight_tag($a);
+            $b = $weight_tag($b);
+
+            if ($a == $b) {
+                return 0;
+            } else {
+                return ($a > $b) ? 1 : -1;
+            }
+        };
+
         /**
          * @var Tag[]
          */
@@ -81,7 +105,7 @@ class GenerateReleaseNotes extends Command {
                 $revTags[$rev] = $tag;
             }
 
-            if ($from_tag === $tag->name) {
+            if ($weight_tag($from_tag) == $weight_tag($tag->name)) {
                 $stopIteration = 30;
                 $output->writeln("Tag limited at {$tag->name}, will load $stopIteration more");
                 continue;
@@ -161,17 +185,7 @@ class GenerateReleaseNotes extends Command {
         }
         );
 
-        uasort(
-            $tagNotes, function ($a, $b) {
-            if ($a == $b) {
-                $r = 0;
-            } else {
-                $r = ($a > $b) ? 1 : -1;
-            }
-
-            return $r;
-        }
-        );
+        uksort($tagNotes, $compare_tags);
 
         $tags_to_print = [];
         foreach ($tagNotes as $tag => $tagData) {
