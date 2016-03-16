@@ -25,6 +25,8 @@ class GenerateReleaseNotes extends Command {
                 new InputOption('github_repo', null, InputOption::VALUE_REQUIRED, 'Github repo'),
                 new InputOption('from_tag', null, InputOption::VALUE_OPTIONAL, 'Tag to start'),
                 new InputOption('repo', null, InputOption::VALUE_REQUIRED, 'Local repo path'),
+                new InputOption('title', null, InputOption::VALUE_OPTIONAL, 'Project title'),
+                //new InputOption('mailto', null, InputOption::VALUE_OPTIONAL, 'Send release notes to Email'),
                 new InputArgument('outfile', InputArgument::OPTIONAL, 'Target md file'),
             ]
         )
@@ -167,10 +169,7 @@ class GenerateReleaseNotes extends Command {
         }
         );
 
-        $log = fopen($outfile, 'w');
-
-        fwrite($log, "\n\n## Release notes\n\n");
-
+        $tags_to_print = [];
         foreach ($tagNotes as $tag => $tagData) {
             if (count($tagData['notes'])) {
                 if ($from_tag && ($tag < $from_tag)) {
@@ -178,29 +177,64 @@ class GenerateReleaseNotes extends Command {
                     continue;
                 }
 
-                $output->writeln("Writing notes for tag {$tag}");
-
-                fwrite($log, "## Версия $tag\n");
-
-                if ($tagData['date']) {
-                    fwrite($log, "**Выпущена:** " . $tagData['date']->format('d.m.Y H:i') . " \n\n");
-                }
-
-                fwrite($log, "\n### Фичи\n\n");
-
-                foreach ($tagData['pulls'] as $pullInfo) {
-                    fwrite($log, $pullInfo . "\n");
-                }
-
-                fwrite($log, "\n### Детальные изменения\n\n");
-
-                foreach ($tagData['notes'] as $noteBlock) {
-                    fwrite($log, $noteBlock . "\n");
-                }
-
-                fwrite($log, "\n");
+                $tags_to_print[$tag] = $tagData;
             }
         }
+
+
+        /** @var string[] $release_notes */
+        $release_notes = [];
+
+        $tags_count = count($tags_to_print);
+
+        if (!$tags_count) {
+            $output->writeln("No release notes to write");
+            exit();
+        }
+
+        $title_append = $input->hasOption('title') ? " {$input->getOption('title')}" : "";
+        $truncate_minor = function($tag) {
+            return preg_replace("#\\.0$#siu", "", $tag);
+        };
+        $first_tag = $truncate_minor(array_shift(array_keys($tags_to_print)));
+        $last_tag = $truncate_minor(array_pop(array_keys($tags_to_print)));
+
+        if ($tags_count == 1) {
+            $subject = "# Релиз{$title_append} $first_tag";
+        } else {
+            $subject = "# Релизы{$title_append} {$first_tag}-{$last_tag}";
+        }
+
+        $release_notes[] = $subject;
+
+        foreach ($tags_to_print as $tag => $tagData) {
+            $output->writeln("Writing notes for tag {$tag}");
+
+            if ($tags_count > 1) {
+                $release_notes[] = "## Версия {$truncate_minor($tag)}";
+            }
+
+            if ($tagData['date']) {
+                $release_notes[] = "**Выпущена:** {$tagData['date']->format('d.m.Y H:i')}";
+            }
+
+            $release_notes[] = "";
+            $release_notes[] = "### Фичи";
+
+            foreach ($tagData['pulls'] as $pullInfo) {
+                $release_notes[] = $pullInfo;
+            }
+
+            $release_notes[] = "";
+            $release_notes[] = "### Детальные изменения";
+
+            foreach ($tagData['notes'] as $noteBlock) {
+                $release_notes[] = $noteBlock;
+            }
+
+        }
+
+        file_put_contents($outfile, implode("\n", $release_notes));
 
     }
 }
