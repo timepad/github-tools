@@ -31,6 +31,7 @@ class GenerateReleaseNotes extends Command {
                 new InputOption('mail_to', null, InputOption::VALUE_OPTIONAL, 'Send release notes to Email'),
                 new InputOption('mail_from', null, InputOption::VALUE_OPTIONAL, 'From: email', "no-reply@timepad.ru"),
                 new InputOption('postmark_api', null, InputOption::VALUE_OPTIONAL, 'Postmark API key', "no-reply@timepad.ru"),
+                new InputOption('pr_overiteration_limit', null, InputOption::VALUE_OPTIONAL, 'Сколько попыток найти следующий PR для тега делать', 3),
                 new InputArgument('outfile', InputArgument::OPTIONAL, 'Target md file'),
             ]
         )
@@ -130,9 +131,10 @@ class GenerateReleaseNotes extends Command {
         ];
 
         $stopIteration = 0;
+        $stopIterationLimit = +$input->getOption('pr_overiteration_limit');
 
         Util::paginateAll(
-            $client, 'PullRequest', 'all', [$gh_user, $gh_repo, $prFilter], function ($pull) use (&$revTags, &$tagNotes, $output, &$stopIteration) {
+            $client, 'PullRequest', 'all', [$gh_user, $gh_repo, $prFilter], function ($pull) use (&$revTags, &$tagNotes, $output, &$stopIteration, $stopIterationLimit) {
             if (!$pull['merged_at']) {
                 $output->writeln("{$pull['number']} was not merged, skipping");
 
@@ -143,7 +145,7 @@ class GenerateReleaseNotes extends Command {
                 $output->writeln("{$pull['number']} has no matching tag, probably out of bounds");
                 $stopIteration++;
 
-                if ($stopIteration > 3) {
+                if ($stopIteration > $stopIterationLimit) {
                     $output->writeln("Stopping now");
 
                     return "stop";
