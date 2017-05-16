@@ -26,7 +26,7 @@ class GenerateReleaseNotes extends Command {
                 new InputOption('github_user', null, InputOption::VALUE_REQUIRED, 'Github user/org'),
                 new InputOption('github_repo', null, InputOption::VALUE_REQUIRED, 'Github repo'),
                 new InputOption('from_tag', null, InputOption::VALUE_OPTIONAL, 'Tag to start'),
-                new InputOption('from_rev', null, InputOption::VALUE_OPTIONAL, 'Interpret provided rev as provided tag'),
+                new InputOption('from_rev', null, InputOption::VALUE_OPTIONAL, 'Interpret current rev as provided tag', false),
                 new InputOption('repo', null, InputOption::VALUE_REQUIRED, 'Local repo path'),
                 new InputOption('title', null, InputOption::VALUE_OPTIONAL, 'Project title'),
                 new InputOption('mail_to', null, InputOption::VALUE_OPTIONAL, 'Send release notes to Email'),
@@ -60,8 +60,9 @@ class GenerateReleaseNotes extends Command {
         $tags = $git->tags();
 
         if ($from_rev) {
-            $output->writeln("Adding virtual tag $from_tag@$from_rev");
-            $nonexistent_tag = new Tag($from_tag, $from_rev, date_create()->format("Y-m-d H:i:s"));
+            $current_rev = $git->current_rev();
+            $output->writeln("Adding virtual tag $from_tag@$current_rev");
+            $nonexistent_tag = new Tag($from_tag, $current_rev, date_create()->format("Y-m-d H:i:s"));
             array_unshift($tags, $nonexistent_tag);
         }
 

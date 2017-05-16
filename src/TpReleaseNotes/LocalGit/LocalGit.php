@@ -66,6 +66,10 @@ class LocalGit {
         return $revs;
     }
 
+    function current_rev() {
+        return $this->command("git rev-parse HEAD");
+    }
+
     function fetch() {
         $this->command("git fetch");
     }
