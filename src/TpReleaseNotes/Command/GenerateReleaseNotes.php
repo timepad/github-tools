@@ -26,6 +26,7 @@ class GenerateReleaseNotes extends Command {
                 new InputOption('github_user', null, InputOption::VALUE_REQUIRED, 'Github user/org'),
                 new InputOption('github_repo', null, InputOption::VALUE_REQUIRED, 'Github repo'),
                 new InputOption('from_tag', null, InputOption::VALUE_OPTIONAL, 'Tag to start'),
+                new InputOption('from_rev', null, InputOption::VALUE_OPTIONAL, 'Interpret provided rev as provided tag'),
                 new InputOption('repo', null, InputOption::VALUE_REQUIRED, 'Local repo path'),
                 new InputOption('title', null, InputOption::VALUE_OPTIONAL, 'Project title'),
                 new InputOption('mail_to', null, InputOption::VALUE_OPTIONAL, 'Send release notes to Email'),
@@ -45,6 +46,7 @@ class GenerateReleaseNotes extends Command {
         $repo     = $input->getOption('repo');
         $outfile  = $input->getArgument('outfile');
         $from_tag = $input->getOption('from_tag');
+        $from_rev = $input->getOption('from_rev');
 
         if (!$outfile) {
             $outfile = "./out/{$gh_user}_{$gh_repo}.md";
@@ -56,6 +58,12 @@ class GenerateReleaseNotes extends Command {
         $git = new LocalGit($repo);
         $git->fetch();
         $tags = $git->tags();
+
+        if ($from_rev) {
+            $output->writeln("Adding virtual tag $from_tag@$from_rev");
+            $nonexistent_tag = new Tag($from_tag, $from_rev, date_create()->format("Y-m-d H:i:s"));
+            array_unshift($tags, $nonexistent_tag);
+        }
 
         $weight_tag = function($tag) {
             preg_match("#(?'major'\\d+)(?:\\.(?'minor'\\d+)(?:\\.(?'patch'\\d+))?)?#siu", $tag, $matches);
