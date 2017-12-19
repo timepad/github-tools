@@ -33,6 +33,7 @@ class GenerateReleaseNotes extends Command {
                 new InputOption('postmark_api', null, InputOption::VALUE_OPTIONAL, 'Postmark API key', "no-reply@timepad.ru"),
                 new InputOption('pr_overiteration_limit', null, InputOption::VALUE_OPTIONAL, 'Сколько попыток найти следующий PR для тега делать', 3),
                 new InputArgument('outfile', InputArgument::OPTIONAL, 'Target md file'),
+                new InputArgument('csv_outfile', InputArgument::OPTIONAL, 'Target csv file'),
             ]
         )
             ->setDescription('Генерит релизноутсы');
@@ -44,10 +45,15 @@ class GenerateReleaseNotes extends Command {
         $gh_repo  = $input->getOption('github_repo');
         $repo     = $input->getOption('repo');
         $outfile  = $input->getArgument('outfile');
+        $csv_outfile  = $input->getArgument('outfile');
         $from_tag = $input->getOption('from_tag');
 
         if (!$outfile) {
             $outfile = "./out/{$gh_user}_{$gh_repo}.md";
+        }
+
+        if (!$csv_outfile) {
+            $csv_outfile = "./out/{$gh_user}_{$gh_repo}.csv";
         }
 
         $client = new GithubClient(new CachedHttpClient(['cache_dir' => '/tmp/github-api-cache']));
@@ -135,65 +141,73 @@ class GenerateReleaseNotes extends Command {
 
         Util::paginateAll(
             $client, 'PullRequest', 'all', [$gh_user, $gh_repo, $prFilter], function ($pull) use (&$revTags, &$tagNotes, $output, &$stopIteration, $stopIterationLimit) {
-            if (!$pull['merged_at']) {
-                $output->writeln("{$pull['number']} was not merged, skipping");
-
-                return;
-            }
-
-            if (!isset($revTags[$pull['head']['sha']])) {
-                $output->writeln("{$pull['number']} has no matching tag, probably out of bounds");
-                $stopIteration++;
-
-                if ($stopIteration > $stopIterationLimit) {
-                    $output->writeln("Stopping now");
-
-                    return "stop";
-                } else {
-                    $output->writeln("Will try another PR");
+                if (!$pull['merged_at']) {
+                    $output->writeln("{$pull['number']} was not merged, skipping");
 
                     return;
                 }
-            }
 
-            $output->writeln("getting notes for pull {$pull['number']}");
+                if (!isset($revTags[$pull['head']['sha']])) {
+                    $output->writeln("{$pull['number']} has no matching tag, probably out of bounds");
+                    $stopIteration++;
 
-            $tag = $revTags[$pull['head']['sha']];
+                    if ($stopIteration > $stopIterationLimit) {
+                        $output->writeln("Stopping now");
 
-            $output->writeln("{$pull['number']} is assigned to tag {$tag->name}");
+                        return "stop";
+                    } else {
+                        $output->writeln("Will try another PR");
 
-            if (!isset($tagNotes[$tag->name])) {
-                $tagNotes[$tag->name] = [
-                    "date"  => $tag->date,
-                    "notes" => []
+                        return;
+                    }
+                }
+
+                $output->writeln("getting notes for pull {$pull['number']}");
+
+                $tag = $revTags[$pull['head']['sha']];
+
+                $output->writeln("{$pull['number']} is assigned to tag {$tag->name}");
+
+                if (!isset($tagNotes[$tag->name])) {
+                    $tagNotes[$tag->name] = [
+                        "date"  => $tag->date,
+                        "notes" => []
+                    ];
+                }
+
+                $bodyLines = [];
+
+                foreach (preg_split("#[\n\r]+#u", $pull['body']) as $bodyLine) {
+                    if (preg_match("#^[\\d*]\\.?\\s*\\[(new|bfx|ref)]\\[.{1,2}]#siu", $bodyLine)) {
+                        $bodyLines[] = $bodyLine;
+                    }
+                }
+
+                $cleanedTitle = preg_replace('!\\#\\d+!siu', '', $pull['title']);
+
+                $tagNotes[$tag->name]['notes'][] = implode("\n", $bodyLines);
+
+                $tagNotes[$tag->name]['pulls'][] = "* $cleanedTitle ([#{$pull['number']}]({$pull['html_url']}) by @{$pull['user']['login']})"; // user
+
+                $tagNotes[$tag->name]['csvdata'][] = [
+                    'ticket' => $pull['number'],
+                    'author' => $pull['user']['login'],
+                    'request' => $cleanedTitle
                 ];
 
+                $stopIteration = 0;
             }
-
-            $bodyLines = [];
-            foreach (preg_split("#[\n\r]+#u", $pull['body']) as $bodyLine) {
-                if (preg_match("#^[\\d*]\\.?\\s*\\[(new|bfx|ref)]\\[.{1,2}]#siu", $bodyLine)) {
-                    $bodyLines[] = $bodyLine;
-                }
-            }
-
-            $tagNotes[$tag->name]['notes'][] = implode("\n", $bodyLines);
-
-            $cleanedTitle = preg_replace('!\\#\\d+!siu', '', $pull['title']);
-
-            $tagNotes[$tag->name]['pulls'][] = "* $cleanedTitle ([#{$pull['number']}]({$pull['html_url']}) by @{$pull['user']['login']})"; // user
-
-            $stopIteration = 0;
-        }
         );
 
         uksort($tagNotes, $compare_tags);
 
         $tags_to_print = [];
+
         foreach ($tagNotes as $tag => $tagData) {
             if (count($tagData['notes'])) {
                 if ($from_tag && ($tag < $from_tag)) {
                     $output->writeln("Tag limited at {$from_tag}, skipping notes for tar $tag");
+
                     continue;
                 }
 
@@ -201,21 +215,35 @@ class GenerateReleaseNotes extends Command {
             }
         }
 
-
         /** @var string[] $release_notes */
         $release_notes = [];
+
+        /** @var [][] $release_notes_csv */
+        $release_notes_csv = [[
+            "Версия",
+            "Дата релиза",
+            "Размер",
+            "Тип",
+            "Пуллреквест",
+            "Автор",
+            "Изменение",
+            "Описание"
+        ]];
 
         $tags_count = count($tags_to_print);
 
         if (!$tags_count) {
             $output->writeln("No release notes to write");
+
             exit();
         }
 
         $title_append = $input->hasOption('title') ? " {$input->getOption('title')}" : "";
+
         $truncate_minor = function($tag) {
             return preg_replace("#\\.0$#siu", "", $tag);
         };
+
         $first_tag = $truncate_minor(array_shift(array_keys($tags_to_print)));
         $last_tag = $truncate_minor(array_pop(array_keys($tags_to_print)));
 
@@ -230,12 +258,20 @@ class GenerateReleaseNotes extends Command {
         foreach ($tags_to_print as $tag => $tagData) {
             $output->writeln("Writing notes for tag {$tag}");
 
+            // Все, что нужно для выгрузки в CSV
+            $tag_notes_csv = [];
+            $date = "";
+
             if ($tags_count > 1) {
                 $release_notes[] = "## Версия {$truncate_minor($tag)}";
             }
 
             if ($tagData['date']) {
                 $release_notes[] = "*{$tagData['date']->format('d.m.Y H:i')}*";
+
+                $date = $tagData['date']->format('d.m.Y H:i');
+            } else {
+                $date = "";
             }
 
             $release_notes[] = "";
@@ -248,10 +284,33 @@ class GenerateReleaseNotes extends Command {
             $release_notes[] = "";
             $release_notes[] = "### Детальные изменения";
 
-            foreach ($tagData['notes'] as $noteBlock) {
+            foreach ($tagData['notes'] as $key => $noteBlock) {
                 $release_notes[] = $noteBlock;
+
+                foreach (preg_split("/\n/", $noteBlock) as $change) {
+                    preg_match("#^[\\d*]\\.?\\s*\\[(?'type'new|bfx|ref)]\\[(?'size'.{1,2})]\s*(?'text'.*+)#siu", $change, $spichki);
+
+                    $size = $spichki['size'];
+                    $type = $spichki['type'];
+                    $description = $spichki['text'];
+                    $ticket = $tagData['csvdata'][$key]['ticket'];
+                    $author = $tagData['csvdata'][$key]['author'];
+                    $request = $tagData['csvdata'][$key]['request'];
+
+                    $tag_notes_csv[] = [
+                        $tag,
+                        $date,
+                        $size,
+                        $type,
+                        $ticket,
+                        $author,
+                        $request,
+                        $description
+                    ];
+                }
             }
 
+            $release_notes_csv = array_merge($release_notes_csv, $tag_notes_csv);
         }
 
         $release_notes[] = "*****";
@@ -261,6 +320,7 @@ class GenerateReleaseNotes extends Command {
         $release_notes = implode("\n", $release_notes);
 
         $mail_to = $input->getOption("mail_to");
+
         if ($mail_to) {
             $mail_from = $input->getOption("mail_from");
             $postmark_api = $input->getOption("postmark_api");
@@ -281,5 +341,10 @@ class GenerateReleaseNotes extends Command {
 
         file_put_contents($outfile, $release_notes);
 
+        $csv_handle = fopen($csv_outfile, "w");
+
+        foreach ($release_notes_csv as $line) {
+            fputcsv($csv_handle, $line, ";");
+        }
     }
 }
