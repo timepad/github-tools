@@ -201,7 +201,7 @@ class GenerateReleaseNotes extends Command {
         $tags_to_print = [];
         foreach ($tagNotes as $tag => $tagData) {
             if (count($tagData['notes'])) {
-                if ($from_tag && ($tag < $from_tag)) {
+                if ($from_tag && ($weight_tag($tag) < $weight_tag($from_tag))) {
                     $output->writeln("Tag limited at {$from_tag}, skipping notes for tar $tag");
                     continue;
                 }
