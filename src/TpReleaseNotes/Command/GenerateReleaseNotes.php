@@ -21,6 +21,8 @@ use TpReleaseNotes\Printable\Tag as PrintableTag;
 use TpReleaseNotes\Printable\Pull as PrintablePull;
 use TpReleaseNotes\Printable\YtIssue as PrintableYtIssue;
 use TpReleaseNotes\Youtrack\Client as YTClient;
+use TpReleaseNotes\Printable\ZdIssue as ZdPrintable;
+use Zendesk\API\HttpClient as ZendeskAPI;
 
 class GenerateReleaseNotes extends Command {
     public function configure() {
@@ -39,6 +41,9 @@ class GenerateReleaseNotes extends Command {
                 new InputOption('pr_overiteration_limit', null, InputOption::VALUE_OPTIONAL, 'Сколько попыток найти следующий PR для тега делать', 3),
                 new InputOption('yt_token', null, InputOption::VALUE_OPTIONAL, 'Youtrack auth token'),
                 new InputOption('yt_host', null, InputOption::VALUE_OPTIONAL, 'Youtrack hostname'),
+                new InputOption('zd_user', null, InputOption::VALUE_OPTIONAL, 'Zendesk auth user'),
+                new InputOption('zd_token', null, InputOption::VALUE_OPTIONAL, 'Zendesk auth token'),
+                new InputOption('zd_subdomain', null, InputOption::VALUE_OPTIONAL, 'Zendesk subdomain'),
                 new InputArgument('outfile', InputArgument::OPTIONAL, 'Target md file'),
             ]
         )
@@ -57,6 +62,10 @@ class GenerateReleaseNotes extends Command {
         $yt_token   = $input->getOption('yt_token');
         $yt_host    = $input->getOption('yt_host');
 
+        $zd_token   = $input->getOption('zd_token');
+        $zd_user    = $input->getOption('zd_user');
+        $zd_subdomain    = $input->getOption('zd_subdomain');
+
         /** @var YTClient $yt_client */
         $yt_client = null;
 
@@ -65,6 +74,20 @@ class GenerateReleaseNotes extends Command {
             $yt_client = new YTClient($yt_host, $yt_token);
         }
 
+        /** @var ZendeskAPI $zd_client */
+        $zd_client = null;
+
+        if ($zd_subdomain && $zd_user && $zd_token) {
+            $output->writeln("Adding zendesk data");
+
+            try {
+                $zd_client = new ZendeskAPI($zd_subdomain);
+                $zd_client->setAuth('basic', ['username' => $zd_user, 'token' => $zd_token]);
+            } catch (\Exception $e) {
+                $output->writeln("Failed to connect to zd");
+                $zd_client = null;
+            }
+        }
 
         if (!$outfile) {
             $outfile = "./out/{$gh_user}_{$gh_repo}.md";
@@ -166,7 +189,7 @@ class GenerateReleaseNotes extends Command {
         $stopIterationLimit = +$input->getOption('pr_overiteration_limit');
 
         Util::paginateAll(
-            $client, 'PullRequest', 'all', [$gh_user, $gh_repo, $prFilter], function ($pull) use (&$revTags, &$processedTags, $output, &$stopIteration, $stopIterationLimit, $yt_client) {
+            $client, 'PullRequest', 'all', [$gh_user, $gh_repo, $prFilter], function ($pull) use (&$revTags, &$processedTags, $output, &$stopIteration, $stopIterationLimit, $yt_client, $zd_client) {
             if (!$pull['merged_at']) {
                 $output->writeln("{$pull['number']} was not merged, skipping");
 
@@ -225,9 +248,26 @@ class GenerateReleaseNotes extends Command {
                 $youtrack_ids = array_unique($youtrack_ids);
                 foreach ($youtrack_ids as $youtrack_id) {
                     $youtrack_issue = $yt_client->getIssue($youtrack_id);
+
                     if ($youtrack_issue) {
                         $output->writeln("Got $youtrack_id data, adding");
                         $p_pull->addYtIssue(PrintableYtIssue::fromIssue($youtrack_issue));
+
+                        if (preg_match_all("#zendesk.com/agent/tickets/(?'zd_id'[0-9]+)#siu", $youtrack_issue->getBody(), $zd_matches)) {
+                            foreach ($zd_matches["zd_id"] as $zd_id) {
+                                $output->writeln("Got ZD #$zd_id");
+
+                                try {
+                                    $zd_issue = $zd_client->tickets()->find($zd_id);
+                                    if ($zd_issue) {
+                                        $p_pull->addZdIssue(ZdPrintable::fromZdIssue($zd_issue));
+                                    }
+
+                                } catch (\Throwable $e) {
+                                    $output->writeln("Can't load #$zd_id");
+                                }
+                            }
+                        }
                     }
                 }
             }

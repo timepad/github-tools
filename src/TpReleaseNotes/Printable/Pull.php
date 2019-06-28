@@ -18,6 +18,9 @@ class Pull {
     /** @var YtIssue[] */
     public $yt_issues = [];
 
+    /** @var ZdIssue[] */
+    public $zd_issues = [];
+
     /**
      * Pull constructor.
      * @param $pull_id
@@ -30,18 +33,23 @@ class Pull {
         $this->yt_issues[] = $yti;
     }
 
+    public function addZdIssue(ZdIssue $zdi) {
+        $this->zd_issues[] = $zdi;
+    }
+
     public function printSting() {
         $result_strings = [];
 
         $result_strings[] = "#### {$this->pull_title}";
         $result_strings[] = "* Github: [#{$this->pull_id}]({$this->pull_url}) by @{$this->pull_author}";
 
-        $issue_count = count($this->yt_issues);
 
-        if ($issue_count) {
-            foreach ($this->yt_issues as $yti) {
-                $result_strings[] = "* {$yti->printString()}";
-            }
+        foreach ($this->yt_issues as $yti) {
+            $result_strings[] = "* {$yti->printString()}";
+        }
+
+        foreach ($this->zd_issues as $yti) {
+            $result_strings[] = "* {$yti->printString()}";
         }
 
         $result_strings[] = $this->pull_notes;
