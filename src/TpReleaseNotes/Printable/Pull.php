@@ -15,6 +15,9 @@ class Pull {
 
     public $pull_url;
 
+    /** @var YtIssue[] */
+    public $yt_issues = [];
+
     /**
      * Pull constructor.
      * @param $pull_id
@@ -23,13 +26,23 @@ class Pull {
         $this->pull_id    = $pull_id;
     }
 
+    public function addYtIssue(YtIssue $yti) {
+        $this->yt_issues[] = $yti;
+    }
 
     public function printSting() {
         $result_strings = [];
 
         $result_strings[] = "#### {$this->pull_title}";
-        $result_strings[] = "Pull Request [#{$this->pull_id}]({$this->pull_url}) by @{$this->pull_author}";
-        $result_strings[] = "";
+        $result_strings[] = "* Github: [#{$this->pull_id}]({$this->pull_url}) by @{$this->pull_author}";
+
+        $issue_count = count($this->yt_issues);
+
+        if ($issue_count) {
+            foreach ($this->yt_issues as $yti) {
+                $result_strings[] = "* {$yti->printString()}";
+            }
+        }
 
         $result_strings[] = $this->pull_notes;
 

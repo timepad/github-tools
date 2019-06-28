@@ -19,6 +19,8 @@ use TpReleaseNotes\LocalGit\Tag;
 use TpReleaseNotes\Util;
 use TpReleaseNotes\Printable\Tag as PrintableTag;
 use TpReleaseNotes\Printable\Pull as PrintablePull;
+use TpReleaseNotes\Printable\YtIssue as PrintableYtIssue;
+use TpReleaseNotes\Youtrack\Client as YTClient;
 
 class GenerateReleaseNotes extends Command {
     public function configure() {
@@ -37,7 +39,6 @@ class GenerateReleaseNotes extends Command {
                 new InputOption('pr_overiteration_limit', null, InputOption::VALUE_OPTIONAL, 'Сколько попыток найти следующий PR для тега делать', 3),
                 new InputOption('yt_token', null, InputOption::VALUE_OPTIONAL, 'Youtrack auth token'),
                 new InputOption('yt_host', null, InputOption::VALUE_OPTIONAL, 'Youtrack hostname'),
-                new InputOption('yt_project', null, InputOption::VALUE_OPTIONAL, 'Youtrack project'),
                 new InputArgument('outfile', InputArgument::OPTIONAL, 'Target md file'),
             ]
         )
@@ -52,6 +53,18 @@ class GenerateReleaseNotes extends Command {
         $outfile  = $input->getArgument('outfile');
         $from_tag = $input->getOption('from_tag');
         $from_rev = $input->getOption('from_rev');
+
+        $yt_token   = $input->getOption('yt_token');
+        $yt_host    = $input->getOption('yt_host');
+
+        /** @var YTClient $yt_client */
+        $yt_client = null;
+
+        if ($yt_host && $yt_token) {
+            $output->writeln("Adding youtrack data");
+            $yt_client = new YTClient($yt_host, $yt_token);
+        }
+
 
         if (!$outfile) {
             $outfile = "./out/{$gh_user}_{$gh_repo}.md";
@@ -153,7 +166,7 @@ class GenerateReleaseNotes extends Command {
         $stopIterationLimit = +$input->getOption('pr_overiteration_limit');
 
         Util::paginateAll(
-            $client, 'PullRequest', 'all', [$gh_user, $gh_repo, $prFilter], function ($pull) use (&$revTags, &$processedTags, $output, &$stopIteration, $stopIterationLimit) {
+            $client, 'PullRequest', 'all', [$gh_user, $gh_repo, $prFilter], function ($pull) use (&$revTags, &$processedTags, $output, &$stopIteration, $stopIterationLimit, $yt_client) {
             if (!$pull['merged_at']) {
                 $output->writeln("{$pull['number']} was not merged, skipping");
 
@@ -190,14 +203,34 @@ class GenerateReleaseNotes extends Command {
             $p_pull->pull_url = $pull['html_url'];
 
             $bodyLines = [];
+            $youtrack_ids = [];
+
             foreach (preg_split("#[\n\r]+#u", $pull['body']) as $bodyLine) {
                 if (preg_match("#^[\\d*]\\.?\\s*\\[(new|bfx|ref)]\\[.{1,2}]#siu", $bodyLine)) {
                     $bodyLines[] = $bodyLine;
+                }
+
+                if ($yt_client) {
+                    if (preg_match("#/youtrack/issue/(?'issueId'[a-z]+-[0-9]+)#siu", $bodyLine, $matches)) {
+                        $youtrack_ids[] = $matches['issueId'];
+                        $output->writeln("{$pull['number']} atatches to {$matches['issueId']}");
+                    }
                 }
             }
 
             $p_pull->pull_notes =  implode("\n", $bodyLines);
             $p_pull->pull_title = preg_replace('!\\#\\d+!siu', '', $pull['title']);
+
+            if ($yt_client) {
+                $youtrack_ids = array_unique($youtrack_ids);
+                foreach ($youtrack_ids as $youtrack_id) {
+                    $youtrack_issue = $yt_client->getIssue($youtrack_id);
+                    if ($youtrack_issue) {
+                        $output->writeln("Got $youtrack_id data, adding");
+                        $p_pull->addYtIssue(PrintableYtIssue::fromIssue($youtrack_issue));
+                    }
+                }
+            }
 
             $processedTags[$tag->name]->addPull($p_pull);
 
