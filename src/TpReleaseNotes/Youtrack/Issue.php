@@ -34,6 +34,10 @@ class Issue {
         return $this->data["summary"];
     }
 
+    public function getBody() {
+        return $this->data["description"];
+    }
+
     protected function getCustomField($field) {
         foreach ($this->data["fields"] as $customField) {
             if ($customField["projectCustomField"]["field"]["name"] == $field) {

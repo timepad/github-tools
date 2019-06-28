@@ -46,7 +46,7 @@ class Client {
      */
     public function getIssue($id) {
         $request = [
-            "fields" => "summary,fields(projectCustomField(field(name)),value(name)),created",
+            "fields" => "description,summary,fields(projectCustomField(field(name)),value(name)),created",
         ];
 
         try {
