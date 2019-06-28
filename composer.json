@@ -8,6 +8,7 @@
     "knplabs/github-api": "~1.4",
     "symfony/console": "~2",
     "wildbit/postmark-php": "dev-master",
-    "michelf/php-markdown": "~1.6.0"
+    "michelf/php-markdown": "~1.6.0",
+    "ext-json": "*"
   }
 }

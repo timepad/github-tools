@@ -17,6 +17,8 @@ use Symfony\Component\Console\Output\OutputInterface;
 use TpReleaseNotes\LocalGit\LocalGit;
 use TpReleaseNotes\LocalGit\Tag;
 use TpReleaseNotes\Util;
+use TpReleaseNotes\Printable\Tag as PrintableTag;
+use TpReleaseNotes\Printable\Pull as PrintablePull;
 
 class GenerateReleaseNotes extends Command {
     public function configure() {
@@ -33,6 +35,9 @@ class GenerateReleaseNotes extends Command {
                 new InputOption('mail_from', null, InputOption::VALUE_OPTIONAL, 'From: email', "no-reply@timepad.ru"),
                 new InputOption('postmark_api', null, InputOption::VALUE_OPTIONAL, 'Postmark API key', "no-reply@timepad.ru"),
                 new InputOption('pr_overiteration_limit', null, InputOption::VALUE_OPTIONAL, 'Сколько попыток найти следующий PR для тега делать', 3),
+                new InputOption('yt_token', null, InputOption::VALUE_OPTIONAL, 'Youtrack auth token'),
+                new InputOption('yt_host', null, InputOption::VALUE_OPTIONAL, 'Youtrack hostname'),
+                new InputOption('yt_project', null, InputOption::VALUE_OPTIONAL, 'Youtrack project'),
                 new InputArgument('outfile', InputArgument::OPTIONAL, 'Target md file'),
             ]
         )
@@ -67,6 +72,10 @@ class GenerateReleaseNotes extends Command {
         }
 
         $weight_tag = function($tag) {
+            if ($tag instanceof PrintableTag) {
+                $tag = $tag->tag;
+            }
+
             preg_match("#(?'major'\\d+)(?:\\.(?'minor'\\d+)(?:\\.(?'patch'\\d+))?)?#siu", $tag, $matches);
 
             $result = 0;
@@ -131,7 +140,8 @@ class GenerateReleaseNotes extends Command {
             }
         }
 
-        $tagNotes = [];
+        /** @var \TpReleaseNotes\Printable\Tag[] $processedTags */
+        $processedTags = [];
 
         $prFilter = [
             'state'     => 'closed',
@@ -143,7 +153,7 @@ class GenerateReleaseNotes extends Command {
         $stopIterationLimit = +$input->getOption('pr_overiteration_limit');
 
         Util::paginateAll(
-            $client, 'PullRequest', 'all', [$gh_user, $gh_repo, $prFilter], function ($pull) use (&$revTags, &$tagNotes, $output, &$stopIteration, $stopIterationLimit) {
+            $client, 'PullRequest', 'all', [$gh_user, $gh_repo, $prFilter], function ($pull) use (&$revTags, &$processedTags, $output, &$stopIteration, $stopIterationLimit) {
             if (!$pull['merged_at']) {
                 $output->writeln("{$pull['number']} was not merged, skipping");
 
@@ -171,13 +181,13 @@ class GenerateReleaseNotes extends Command {
 
             $output->writeln("{$pull['number']} is assigned to tag {$tag->name}");
 
-            if (!isset($tagNotes[$tag->name])) {
-                $tagNotes[$tag->name] = [
-                    "date"  => $tag->date,
-                    "notes" => []
-                ];
-
+            if (!isset($processedTags[$tag->name])) {
+                $processedTags[$tag->name] = new PrintableTag($tag->name, $tag->date);
             }
+
+            $p_pull = new PrintablePull($pull['number']);
+            $p_pull->pull_author = $pull['user']['login'];
+            $p_pull->pull_url = $pull['html_url'];
 
             $bodyLines = [];
             foreach (preg_split("#[\n\r]+#u", $pull['body']) as $bodyLine) {
@@ -186,27 +196,27 @@ class GenerateReleaseNotes extends Command {
                 }
             }
 
-            $tagNotes[$tag->name]['notes'][] = implode("\n", $bodyLines);
+            $p_pull->pull_notes =  implode("\n", $bodyLines);
+            $p_pull->pull_title = preg_replace('!\\#\\d+!siu', '', $pull['title']);
 
-            $cleanedTitle = preg_replace('!\\#\\d+!siu', '', $pull['title']);
-
-            $tagNotes[$tag->name]['pulls'][] = "* $cleanedTitle ([#{$pull['number']}]({$pull['html_url']}) by @{$pull['user']['login']})"; // user
+            $processedTags[$tag->name]->addPull($p_pull);
 
             $stopIteration = 0;
         }
         );
 
-        uksort($tagNotes, $compare_tags);
+        uksort($processedTags, $compare_tags);
 
+        /** @var PrintableTag[] $tags_to_print */
         $tags_to_print = [];
-        foreach ($tagNotes as $tag => $tagData) {
-            if (count($tagData['notes'])) {
+        foreach ($processedTags as $tag_id => $tag) {
+            if (count($tag->pulls)) {
                 if ($from_tag && ($weight_tag($tag) < $weight_tag($from_tag))) {
-                    $output->writeln("Tag limited at {$from_tag}, skipping notes for tar $tag");
+                    $output->writeln("Tag limited at {$from_tag}, skipping notes for tar {$tag->tag}");
                     continue;
                 }
 
-                $tags_to_print[$tag] = $tagData;
+                $tags_to_print[$tag_id] = $tag;
             }
         }
 
@@ -223,7 +233,7 @@ class GenerateReleaseNotes extends Command {
 
         $title_append = $input->hasOption('title') ? " {$input->getOption('title')}" : "";
         $truncate_minor = function($tag) {
-            return preg_replace("#\\.0$#siu", "", $tag);
+            return Util::truncateMinorVersion($tag);
         };
         $first_tag = $truncate_minor(array_shift(array_keys($tags_to_print)));
         $last_tag = $truncate_minor(array_pop(array_keys($tags_to_print)));
@@ -239,27 +249,7 @@ class GenerateReleaseNotes extends Command {
         foreach ($tags_to_print as $tag => $tagData) {
             $output->writeln("Writing notes for tag {$tag}");
 
-            if ($tags_count > 1) {
-                $release_notes[] = "## Версия {$truncate_minor($tag)}";
-            }
-
-            if ($tagData['date']) {
-                $release_notes[] = "*{$tagData['date']->format('d.m.Y H:i')}*";
-            }
-
-            $release_notes[] = "";
-            $release_notes[] = "### Фичи";
-
-            foreach ($tagData['pulls'] as $pullInfo) {
-                $release_notes[] = $pullInfo;
-            }
-
-            $release_notes[] = "";
-            $release_notes[] = "### Детальные изменения";
-
-            foreach ($tagData['notes'] as $noteBlock) {
-                $release_notes[] = $noteBlock;
-            }
+            $release_notes[] = $tagData->printSting($tags_count > 1);
 
         }
 

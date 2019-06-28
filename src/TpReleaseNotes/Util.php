@@ -48,4 +48,8 @@ class Util {
     public static function d($var) {
         var_dump($var);
     }
+
+    public static function truncateMinorVersion($tag) {
+        return preg_replace("#\\.0$#siu", "", $tag);
+    }
 }
