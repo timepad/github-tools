@@ -258,7 +258,8 @@ class GenerateReleaseNotes extends Command {
                                 $output->writeln("Got ZD #$zd_id");
 
                                 try {
-                                    $zd_issue = $zd_client->tickets()->find($zd_id);
+                                    $zd_issue = $zd_client->tickets()->sideload(['users'])->find($zd_id);
+
                                     if ($zd_issue) {
                                         $p_pull->addZdIssue(ZdPrintable::fromZdIssue($zd_issue));
                                     }
