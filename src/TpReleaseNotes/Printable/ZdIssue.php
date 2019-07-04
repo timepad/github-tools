@@ -21,7 +21,7 @@ class ZdIssue {
 
         // https://timepad.zendesk.com/api/v2/tickets/79910.json
         $api_url = $zdIssue->ticket->url;
-        preg_match("#(?'domain'.+)\\.zendesk.com/api/#siu", $api_url, $url_matches);
+        preg_match("#//(?'domain'.+)\\.zendesk.com/api/#siu", $api_url, $url_matches);
         $s->zd_url = "https://{$url_matches['domain']}.zendesk.com/agent/tickets/{$s->zd_id}";
 
         foreach ($zdIssue->users as $u) {
