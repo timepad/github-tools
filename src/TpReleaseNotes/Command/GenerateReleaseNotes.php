@@ -229,24 +229,25 @@ class GenerateReleaseNotes extends Command {
             $p_pull->pull_author = $pull['user']['login'];
             $p_pull->pull_url = $pull['html_url'];
 
-            $bodyLines = [];
+            $notes_lines = [];
+            $prelude_lines = [];
             $youtrack_ids = [];
 
             foreach (preg_split("#[\n\r]+#u", $pull['body']) as $bodyLine) {
-                if (preg_match("#^[\\d*]\\.?\\s*\\[(new|bfx|ref)]\\[.{1,2}]#siu", $bodyLine)) {
-                    $bodyLines[] = $bodyLine;
-                }
-
-                if ($yt_client) {
-                    if (preg_match("#/youtrack/issue/(?'issueId'[a-z]+-[0-9]+)#siu", $bodyLine, $matches)) {
-                        $youtrack_ids[] = $matches['issueId'];
-                        $output->writeln("{$pull['number']} atatches to {$matches['issueId']}");
-                    }
+                if (preg_match("#^[\\d*]\\.?\\s*\\[(new|bfx|ref|del)]\\[.{1,2}]#siu", $bodyLine)) {
+                    $notes_lines[] = $bodyLine;
+                } elseif ($yt_client && preg_match("#/youtrack/issue/(?'issueId'[a-z]+-[0-9]+)#siu", $bodyLine, $matches)) {
+                    $youtrack_ids[] = $matches['issueId'];
+                    $output->writeln("{$pull['number']} atatches to {$matches['issueId']}");
+                } elseif (!count($notes_lines)) {
+                    // Строчки с контентом до ноутсов запишем
+                    $prelude_lines[] = $bodyLine;
                 }
             }
 
-            $p_pull->pull_notes =  implode("\n", $bodyLines);
-            $p_pull->pull_title = preg_replace('!\\#\\d+!siu', '', $pull['title']);
+            $p_pull->pull_notes     = implode("\n", $notes_lines);
+            $p_pull->pull_prelude   = trim(implode("  \n", $prelude_lines));
+            $p_pull->pull_title     = preg_replace('!\\#\\d+!siu', '', $pull['title']);
 
             if ($yt_client) {
                 $youtrack_ids = array_unique($youtrack_ids);
