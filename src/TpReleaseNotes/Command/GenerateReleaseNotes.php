@@ -44,6 +44,7 @@ class GenerateReleaseNotes extends Command {
                 new InputOption('zd_user', null, InputOption::VALUE_OPTIONAL, 'Zendesk auth user'),
                 new InputOption('zd_token', null, InputOption::VALUE_OPTIONAL, 'Zendesk auth token'),
                 new InputOption('zd_subdomain', null, InputOption::VALUE_OPTIONAL, 'Zendesk subdomain'),
+                new InputOption('zd_reply', false, InputOption::VALUE_OPTIONAL, 'Zendesk autoreply'),
                 new InputArgument('outfile', InputArgument::OPTIONAL, 'Target md file'),
             ]
         )
@@ -65,6 +66,7 @@ class GenerateReleaseNotes extends Command {
         $zd_token   = $input->getOption('zd_token');
         $zd_user    = $input->getOption('zd_user');
         $zd_subdomain    = $input->getOption('zd_subdomain');
+        $zd_reply   = $input->getOption('zd_reply');
 
         /** @var YTClient $yt_client */
         $yt_client = null;
@@ -189,7 +191,9 @@ class GenerateReleaseNotes extends Command {
         $stopIterationLimit = +$input->getOption('pr_overiteration_limit');
 
         Util::paginateAll(
-            $client, 'PullRequest', 'all', [$gh_user, $gh_repo, $prFilter], function ($pull) use (&$revTags, &$processedTags, $output, &$stopIteration, $stopIterationLimit, $yt_client, $zd_client) {
+            $client, 'PullRequest', 'all',
+            [$gh_user, $gh_repo, $prFilter],
+            function ($pull) use (&$revTags, &$processedTags, $output, &$stopIteration, $stopIterationLimit, $yt_client, $zd_client, $zd_reply) {
             if (!$pull['merged_at']) {
                 $output->writeln("{$pull['number']} was not merged, skipping");
 
@@ -262,6 +266,23 @@ class GenerateReleaseNotes extends Command {
 
                                     if ($zd_issue) {
                                         $p_pull->addZdIssue(ZdPrintable::fromZdIssue($zd_issue));
+
+                                        /*  этот код должен запускаться уже после разбивки PR на релизы
+                                        if ($zd_reply) {
+                                            $zd_reply_text = "Изменения, связанные с этим запросом были только что выкачены с релизом "
+
+                                            if ($zd_issue['status'] !== "closed") {
+                                                $zd_update = [
+                                                    "status" => "solved",
+                                                    "comment" => [
+                                                        "public" => true,
+                                                        "body" => "Изменения, связанные с эт"
+                                                    ]
+                                                ];
+                                                $zd_client->tickets()->update($zd_id);
+                                            }
+                                        }
+                                        */
                                     }
 
                                 } catch (\Throwable $e) {
