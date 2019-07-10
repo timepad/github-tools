@@ -38,6 +38,17 @@ class Issue {
         return $this->data["description"];
     }
 
+    /** @return string[] */
+    public function getTags() {
+        $result = [];
+
+        foreach ($this->data["tags"] as $tag) {
+            $result[] = $tag["name"];
+        }
+
+        return $result;
+    }
+
     protected function getCustomField($field) {
         foreach ($this->data["fields"] as $customField) {
             if ($customField["projectCustomField"]["field"]["name"] == $field) {
