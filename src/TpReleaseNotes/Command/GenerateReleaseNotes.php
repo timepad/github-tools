@@ -45,6 +45,9 @@ class GenerateReleaseNotes extends Command {
                 new InputOption('zd_token', null, InputOption::VALUE_OPTIONAL, 'Zendesk auth token'),
                 new InputOption('zd_subdomain', null, InputOption::VALUE_OPTIONAL, 'Zendesk subdomain'),
                 new InputOption('zd_reply', false, InputOption::VALUE_OPTIONAL, 'Zendesk autoreply'),
+                new InputOption('tg_token', false, InputOption::VALUE_OPTIONAL, 'Telegram bot token'),
+                new InputOption('tg_chats', false, InputOption::VALUE_OPTIONAL, 'Telegram bot chat ids (space separated)'),
+                new InputOption('tg_proxy', false, InputOption::VALUE_OPTIONAL, 'Telegram proxy'),
                 new InputArgument('outfile', InputArgument::OPTIONAL, 'Target md file'),
             ]
         )
@@ -67,6 +70,10 @@ class GenerateReleaseNotes extends Command {
         $zd_user    = $input->getOption('zd_user');
         $zd_subdomain    = $input->getOption('zd_subdomain');
         $zd_reply   = $input->getOption('zd_reply');
+
+        $tg_token   = $input->getOption('tg_token');
+        $tg_chats   = explode(" ", $input->getOption('tg_chats'));
+        $tg_proxy   = $input->getOption('tg_proxy');
 
         /** @var YTClient $yt_client */
         $yt_client = null;
@@ -338,6 +345,39 @@ class GenerateReleaseNotes extends Command {
             $subject = "Релиз{$title_append} $first_tag";
         } else {
             $subject = "Релизы{$title_append} {$first_tag}-{$last_tag}";
+        }
+
+        if ($tg_token) {
+            $output->writeln("Preparing TG message");
+
+            try {
+                $bot        = new \TelegramBot\Api\BotApi($tg_token);
+                if ($tg_proxy) {
+                    $bot->setCurlOption(CURLOPT_PROXY, $tg_proxy);
+                }
+
+                $tg_message = [];
+
+                $tg_message[] = "🎁 $subject\n";
+
+                foreach ($tags_to_print as $tag => $tagData) {
+                    $tg_message[] = $tagData->printSting($tags_count > 1, "tg");
+                }
+
+                $tg_message[] = "Подробности читайте на почте :)";
+                $tg_message[] = "Ваши роботы.";
+
+                $tg_message_text = implode("\n", $tg_message) . "\n";
+
+                foreach ($tg_chats as $tg_chat) {
+                    $output->writeln("Sending TG message to $tg_chat");
+                    $bot->sendMessage("-{$tg_chat}", $tg_message_text);
+                }
+            } catch (\Exception $e) {
+                $output->writeln("TG failed: {$e->getMessage()}");
+            }
+
+            $output->writeln("TG stuff done");
         }
 
         $release_notes[] = "# $subject";

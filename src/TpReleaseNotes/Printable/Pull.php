@@ -39,28 +39,41 @@ class Pull {
         $this->zd_issues[] = $zdi;
     }
 
-    public function printSting() {
+    public function printSting($format = "mail") {
         $result_strings = [];
 
-        $result_strings[] = "#### {$this->pull_title}";
-        $result_strings[] = "* Github: [#{$this->pull_id}]({$this->pull_url}) by @{$this->pull_author}  ";
-
+        if ($format === "mail") {
+            $result_strings[] = "#### {$this->pull_title}";
+            $result_strings[] = "* Github: [#{$this->pull_id}]({$this->pull_url}) by @{$this->pull_author}  ";
+        } elseif ($format === "tg") {
+            $result_strings[] = "🎈 {$this->pull_title}";
+        }
 
         foreach ($this->yt_issues as $yti) {
-            $result_strings[] = "* {$yti->printString()}  ";
+            if ($format === "mail") {
+                $result_strings[] = "* {$yti->printString($format)}  ";
+            } elseif ($format === "tg") {
+                $result_strings[] = "➡️ {$yti->printString($format)}";
+            }
         }
 
-        foreach ($this->zd_issues as $yti) {
-            $result_strings[] = "* {$yti->printString()}  ";
+        foreach ($this->zd_issues as $zdi) {
+            if ($format === "mail") {
+                $result_strings[] = "* {$zdi->printString($format)}  ";
+            } elseif ($format === "tg") {
+                $result_strings[] = "➡️ {$zdi->printString($format)}  ";
+            }
         }
 
-        if ($this->pull_prelude) {
-            $result_strings[] = "";
-            $result_strings[] = $this->pull_prelude;
-            $result_strings[] = "";
-        }
+        if ($format === "mail") {
+            if ($this->pull_prelude) {
+                $result_strings[] = "";
+                $result_strings[] = $this->pull_prelude;
+                $result_strings[] = "";
+            }
 
-        $result_strings[] = $this->pull_notes;
+            $result_strings[] = $this->pull_notes;
+        }
 
         return implode("\n", $result_strings);
     }

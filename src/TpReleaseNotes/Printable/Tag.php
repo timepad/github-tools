@@ -40,7 +40,7 @@ class Tag {
         $this->pulls[$pull->pull_id] = $pull;
     }
 
-    public function printSting($print_title = false) {
+    public function printSting($print_title = false, $format = "mail") {
         $truncate_minor = function($tag) {
             return Util::truncateMinorVersion($tag);
         };
@@ -48,17 +48,22 @@ class Tag {
         $result_strings = [];
 
         if ($print_title) {
-            $result_strings[] = "## Версия {$truncate_minor($this->tag)}";
+            if ($format === "mail") {
+                $result_strings[] = "## Версия {$truncate_minor($this->tag)}";
+            } elseif ($format === "tg") {
+                $result_strings[] = "\n💎 Версия {$truncate_minor($this->tag)}\n";
+            }
         }
 
-        if ($this->date) {
+        if ($this->date && $format === "mail") {
             $result_strings[] = "*{$this->date->format('d.m.Y H:i')}*";
         }
 
         $result_strings[] = "";
 
         foreach ($this->pulls as $pullInfo) {
-            $result_strings[] = $pullInfo->printSting();
+            $result_strings[] = $pullInfo->printSting($format);
+            $result_strings[] = "";
         }
 
         return implode("\n", $result_strings);

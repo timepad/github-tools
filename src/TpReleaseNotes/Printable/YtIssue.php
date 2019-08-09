@@ -19,17 +19,25 @@ class YtIssue {
 
     public $yt_size;
 
-    public function printString() {
+    public function printString($format = "mail") {
         $result_strings = [];
 
-        $result_strings[] = "[{$this->yt_id}]({$this->yt_url}) {$this->yt_title} – {$this->yt_type}";
+        if ($format === "mail") {
+            $result_strings[] = "[{$this->yt_id}]({$this->yt_url}) {$this->yt_title} – {$this->yt_type}";
 
-        if ($this->yt_department) {
-            $result_strings[] = "от *{$this->yt_department}*";
-        }
+            if ($this->yt_department) {
+                $result_strings[] = "от *{$this->yt_department}*";
+            }
 
-        if ($this->yt_size) {
-            $result_strings[] = "[{$this->yt_size}]";
+            if ($this->yt_size) {
+                $result_strings[] = "[{$this->yt_size}]";
+            }
+        } elseif ($format === "tg") {
+            $result_strings[] = "{$this->yt_id} {$this->yt_title} – {$this->yt_type}";
+
+            if ($this->yt_department) {
+                $result_strings[] = "от {$this->yt_department}";
+            }
         }
 
         return implode(" ", $result_strings);

@@ -13,6 +13,8 @@ class ZdIssue {
 
     public $zd_requester;
 
+    public $zd_requester_name;
+
     public static function fromZdIssue($zdIssue) {
         $s = new self;
 
@@ -27,16 +29,21 @@ class ZdIssue {
         foreach ($zdIssue->users as $u) {
             if ($u->id == $zdIssue->ticket->requester_id) {
                 $s->zd_requester = "{$u->name} &lt;{$u->email}&gt;";
+                $s->zd_requester_name = $u->name;
             }
         }
 
         return $s;
     }
 
-    public function printString() {
+    public function printString($format = "mail") {
         $result_strings = [];
 
-        $result_strings[] = "[Zendesk #{$this->zd_id}]({$this->zd_url}) {$this->zd_name} – *{$this->zd_requester}*";
+        if ($format === "mail") {
+            $result_strings[] = "[Zendesk #{$this->zd_id}]({$this->zd_url}) {$this->zd_name} – *{$this->zd_requester}*";
+        } elseif ($format === "tg") {
+            $result_strings[] = "Zendesk #{$this->zd_id} {$this->zd_name} – {$this->zd_requester_name}";
+        }
 
         return implode(" ", $result_strings);
     }

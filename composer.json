@@ -10,6 +10,7 @@
     "wildbit/postmark-php": "dev-master",
     "michelf/php-markdown": "~1.6.0",
     "ext-json": "*",
-    "zendesk/zendesk_api_client_php": "~2.2"
+    "zendesk/zendesk_api_client_php": "~2.2",
+    "telegram-bot/api": "^2.3"
   }
 }
