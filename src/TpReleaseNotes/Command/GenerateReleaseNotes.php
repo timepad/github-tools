@@ -364,7 +364,8 @@ class GenerateReleaseNotes extends Command {
                     $tg_message[] = $tagData->printSting($tags_count > 1, "tg");
                 }
 
-                $tg_message[] = "Подробности читайте на почте :)";
+                $tg_message[] = "Подробнее — на почте :)";
+                $tg_message[] = "Подпишитесь на канал с релизами: https://t.me/joinchat/AAAAAEkvGd8VBLjNDMWe3w";
                 $tg_message[] = "Ваши роботы.";
 
                 $tg_message_text = implode("\n", $tg_message) . "\n";
