@@ -372,7 +372,11 @@ class GenerateReleaseNotes extends Command {
 
                 foreach ($tg_chats as $tg_chat) {
                     $output->writeln("Sending TG message to $tg_chat");
-                    $bot->sendMessage("-{$tg_chat}", $tg_message_text);
+                    try {
+                        $bot->sendMessage("-{$tg_chat}", $tg_message_text);
+                    } catch (\Exception $e) {
+                        $output->writeln("TG to $tg_chat failed: {$e->getMessage()}");
+                    }
                 }
             } catch (\Exception $e) {
                 $output->writeln("TG failed: {$e->getMessage()}");
