@@ -33,15 +33,22 @@ class LocalGit {
     }
 
     /**
+     * @param bool $filter
      * @return Tag[]
+     * @throws \Exception
      */
-    function tags() {
+    function tags($filter = false) {
         $tagSpecs = [];
         $cmdResult = $this->command("git for-each-ref --sort='-*authordate' 'refs/tags' --format='%(*refname) %(*objectname):%(*authordate:iso8601)'");
 
         foreach (preg_split("![\n\r]+!", $cmdResult) as $tagLine) {
             try {
-                $tagSpecs[] = Tag::fromRefDesc($tagLine);
+                $tagSpec = Tag::fromRefDesc($tagLine);
+                if ($filter && !preg_match('!^\d+(\.\d+){1,2}$!siu', $tagSpec->name)) {
+                    continue;
+                }
+
+                $tagSpecs[] = $tagSpec;
             } catch (\Exception $e) {
                 continue;
             }

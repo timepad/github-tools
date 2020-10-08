@@ -33,6 +33,7 @@ class GenerateReleaseNotes extends Command {
                 new InputOption('github_repo', null, InputOption::VALUE_REQUIRED, 'Github repo'),
                 new InputOption('from_tag', null, InputOption::VALUE_OPTIONAL, 'Tag to start'),
                 new InputOption('from_rev', null, InputOption::VALUE_OPTIONAL, 'Interpret current rev as provided tag', false),
+                new InputOption('filter_bad_tags', null, InputOption::VALUE_OPTIONAL, 'Filter bad tags', false),
                 new InputOption('repo', null, InputOption::VALUE_REQUIRED, 'Local repo path'),
                 new InputOption('title', null, InputOption::VALUE_OPTIONAL, 'Project title'),
                 new InputOption('mail_to', null, InputOption::VALUE_OPTIONAL, 'Send release notes to Email'),
@@ -62,6 +63,7 @@ class GenerateReleaseNotes extends Command {
         $outfile  = $input->getArgument('outfile');
         $from_tag = $input->getOption('from_tag');
         $from_rev = $input->getOption('from_rev');
+        $filter_bad_tags = $input->getOption('filter_bad_tags');
 
         $yt_token   = $input->getOption('yt_token');
         $yt_host    = $input->getOption('yt_host');
@@ -107,7 +109,7 @@ class GenerateReleaseNotes extends Command {
 
         $git = new LocalGit($repo);
         $git->fetch();
-        $tags = $git->tags();
+        $tags = $git->tags($filter_bad_tags);
 
         if ($from_rev) {
             $current_rev = $git->current_rev();
