@@ -249,7 +249,7 @@ class GenerateReleaseNotes extends Command {
                 $youtrack_ids = [];
 
                 foreach (preg_split("#[\n\r]+#u", $pull['body']) as $bodyLine) {
-                    if (preg_match("#^[\\d*]\\.?\\s*\\[(new|bfx|ref|del)]\\[.{1,2}]#siu", $bodyLine)) {
+                    if (preg_match("#^[\\d*]\\.?\\s*\\[(new|bfx|ref|del)](\\[.{1,2}])?#siu", $bodyLine)) {
                         $notes_lines[] = $bodyLine;
                     } elseif ($yt_client && preg_match("#/youtrack/issue/(?'issueId'[a-z]+-[0-9]+)#siu", $bodyLine, $matches)) {
                         $youtrack_ids[] = $matches['issueId'];
