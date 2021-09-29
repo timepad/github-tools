@@ -59,6 +59,27 @@ class Client {
         }
     }
 
+    public function applyCommand($command, $issueIds = []) {
+        $request = [
+            "query"     => $command,
+            "issues"    => [],
+        ];
+
+        if (!count($issueIds)) {
+            return null;
+        }
+
+        foreach ($issueIds as $issueId) {
+            $request["issues"][]["idReadable"] = $issueId;
+        }
+
+        try {
+            $this->client->post("commands", [\GuzzleHttp\RequestOptions::JSON => $request]);
+        } catch (\Throwable $e) {
+            return null;
+        }
+    }
+
     public function getUrl() {
         return "https://{$this->host}/youtrack";
     }

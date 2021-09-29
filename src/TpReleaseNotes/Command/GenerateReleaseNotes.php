@@ -43,6 +43,7 @@ class GenerateReleaseNotes extends Command {
                 new InputOption('pr_master_only', null, InputOption::VALUE_OPTIONAL, 'Выводить только PR в мастер'),
                 new InputOption('yt_token', null, InputOption::VALUE_OPTIONAL, 'Youtrack auth token'),
                 new InputOption('yt_host', null, InputOption::VALUE_OPTIONAL, 'Youtrack hostname'),
+                new InputOption('yt_mark_released', null, InputOption::VALUE_OPTIONAL, 'Youtrack mark released'),
                 new InputOption('zd_user', null, InputOption::VALUE_OPTIONAL, 'Zendesk auth user'),
                 new InputOption('zd_token', null, InputOption::VALUE_OPTIONAL, 'Zendesk auth token'),
                 new InputOption('zd_subdomain', null, InputOption::VALUE_OPTIONAL, 'Zendesk subdomain'),
@@ -69,6 +70,7 @@ class GenerateReleaseNotes extends Command {
 
         $yt_token   = $input->getOption('yt_token');
         $yt_host    = $input->getOption('yt_host');
+        $yt_mark_released = !!$input->getOption('yt_mark_released');
 
         $zd_token   = $input->getOption('zd_token');
         $zd_user    = $input->getOption('zd_user');
@@ -407,6 +409,23 @@ class GenerateReleaseNotes extends Command {
         $release_notes[] = "**СЛАВА РОБОТАМ**";
 
         $release_notes = implode("\n", $release_notes);
+
+        if ($yt_client && $yt_mark_released) {
+            $output->writeln("Collecting YT issues to mark as released");
+            $released_youtrack_ids = [];
+
+            foreach ($tags_to_print as $tagData) {
+                foreach ($tagData->pulls as $pull) {
+                    foreach ($pull->yt_issues as $issue) {
+                        $released_youtrack_ids[] = $issue->yt_id;
+                        $output->writeln("Collected {$issue->yt_id}");
+                    }
+                }
+            }
+
+            $output->writeln("Marking all Done youtrack tickets as Released");
+            $yt_client->applyCommand("Mark released", $released_youtrack_ids);
+        }
 
         $mail_to = $input->getOption("mail_to");
         if ($mail_to) {
