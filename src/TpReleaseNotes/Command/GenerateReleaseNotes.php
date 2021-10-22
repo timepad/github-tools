@@ -411,20 +411,15 @@ class GenerateReleaseNotes extends Command {
         $release_notes = implode("\n", $release_notes);
 
         if ($yt_client && $yt_mark_released) {
-            $output->writeln("Collecting YT issues to mark as released");
-            $released_youtrack_ids = [];
+            $output->writeln("Marking all Done youtrack tickets as Released");
 
             foreach ($tags_to_print as $tagData) {
                 foreach ($tagData->pulls as $pull) {
                     foreach ($pull->yt_issues as $issue) {
-                        $released_youtrack_ids[] = $issue->yt_id;
-                        $output->writeln("Collected {$issue->yt_id}");
+                        $yt_client->applyCommand("Mark released {$issue->yt_id}", [$issue->yt_id]);
                     }
                 }
             }
-
-            $output->writeln("Marking all Done youtrack tickets as Released");
-            $yt_client->applyCommand("Mark released", $released_youtrack_ids);
         }
 
         $mail_to = $input->getOption("mail_to");
