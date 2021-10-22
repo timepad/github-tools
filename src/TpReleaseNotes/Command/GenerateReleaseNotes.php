@@ -416,7 +416,8 @@ class GenerateReleaseNotes extends Command {
             foreach ($tags_to_print as $tagData) {
                 foreach ($tagData->pulls as $pull) {
                     foreach ($pull->yt_issues as $issue) {
-                        $yt_client->applyCommand("Mark released {$issue->yt_id}", [$issue->yt_id]);
+                        $output->writeln("Mark released  {$issue->yt_id}");
+                        $yt_client->applyCommand("Mark released", [$issue->yt_id]);
                     }
                 }
             }
