@@ -214,7 +214,7 @@ class GenerateReleaseNotes extends Command {
                 if (!$pull['merged_at']) {
                     $output->writeln("{$pull['number']} was not merged, skipping");
 
-                    return;
+                    return null;
                 }
 
                 if (!isset($revTags[$pull['head']['sha']])) {
@@ -228,7 +228,7 @@ class GenerateReleaseNotes extends Command {
                     } else {
                         $output->writeln("Will try another PR");
 
-                        return;
+                        return null;
                     }
                 }
 
@@ -242,79 +242,12 @@ class GenerateReleaseNotes extends Command {
                     $processedTags[$tag->name] = new PrintableTag($tag->name, $tag->date);
                 }
 
-                $p_pull = new PrintablePull($pull['number']);
-                $p_pull->pull_author = $pull['user']['login'];
-                $p_pull->pull_url = $pull['html_url'];
-
-                $notes_lines = [];
-                $prelude_lines = [];
-                $youtrack_ids = [];
-
-                foreach (preg_split("#[\n\r]+#u", $pull['body']) as $bodyLine) {
-                    if (preg_match("#^[\\d*]\\.?\\s*\\[(new|bfx|ref|del)](\\[.{1,2}])?#siu", $bodyLine)) {
-                        $notes_lines[] = $bodyLine;
-                    } elseif ($yt_client && preg_match("#/youtrack/issue/(?'issueId'[a-z]+-[0-9]+)#siu", $bodyLine, $matches)) {
-                        $youtrack_ids[] = $matches['issueId'];
-                        $output->writeln("{$pull['number']} atatches to {$matches['issueId']}");
-                    } elseif (!count($notes_lines)) {
-                        // Строчки с контентом до ноутсов запишем
-                        $prelude_lines[] = $bodyLine;
-                    }
-                }
-
-                $p_pull->pull_notes     = implode("\n", $notes_lines);
-                $p_pull->pull_prelude   = trim(implode("  \n", $prelude_lines));
-                $p_pull->pull_title     = preg_replace('!\\#\\d+!siu', '', $pull['title']);
-
-                if ($yt_client) {
-                    $youtrack_ids = array_unique($youtrack_ids);
-                    foreach ($youtrack_ids as $youtrack_id) {
-                        $youtrack_issue = $yt_client->getIssue($youtrack_id);
-
-                        if ($youtrack_issue) {
-                            $output->writeln("Got $youtrack_id data, adding");
-                            $p_pull->addYtIssue(PrintableYtIssue::fromIssue($youtrack_issue));
-
-                            if (preg_match_all("#zendesk.com/agent/tickets/(?'zd_id'[0-9]+)#siu", $youtrack_issue->getBody(), $zd_matches)) {
-                                foreach ($zd_matches["zd_id"] as $zd_id) {
-                                    $output->writeln("Got ZD #$zd_id");
-
-                                    try {
-                                        $zd_issue = $zd_client->tickets()->sideload(['users'])->find($zd_id);
-
-                                        if ($zd_issue) {
-                                            $p_pull->addZdIssue(ZdPrintable::fromZdIssue($zd_issue));
-
-                                            /*  этот код должен запускаться уже после разбивки PR на релизы
-                                            if ($zd_reply) {
-                                                $zd_reply_text = "Изменения, связанные с этим запросом были только что выкачены с релизом "
-
-                                                if ($zd_issue['status'] !== "closed") {
-                                                    $zd_update = [
-                                                        "status" => "solved",
-                                                        "comment" => [
-                                                            "public" => true,
-                                                            "body" => "Изменения, связанные с эт"
-                                                        ]
-                                                    ];
-                                                    $zd_client->tickets()->update($zd_id);
-                                                }
-                                            }
-                                            */
-                                        }
-
-                                    } catch (\Throwable $e) {
-                                        $output->writeln("Can't load #$zd_id");
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
+                $p_pull = PrintablePull::createFromGHPull($pull, $yt_client, $zd_client);
                 $processedTags[$tag->name]->addPull($p_pull);
 
                 $stopIteration = 0;
+
+                return null;
         }
         );
 
