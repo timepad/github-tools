@@ -13,6 +13,7 @@ $console = new Application();
 
 $console->add(new \TpReleaseNotes\Command\GenerateReleaseNotes('make_notes'));
 $console->add(new \TpReleaseNotes\Command\Stats('make_stats'));
+$console->add(new \TpReleaseNotes\Command\CreateRC('create_rc'));
 
 $console->run();
 
