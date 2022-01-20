@@ -5,8 +5,12 @@
 
 namespace TpReleaseNotes\Command;
 
+use Cache\Adapter\Filesystem\FilesystemCachePool;
+use Github\AuthMethod;
 use Github\Client as GithubClient;
 use Github\HttpClient\CachedHttpClient;
+use League\Flysystem\Adapter\Local;
+use League\Flysystem\Filesystem;
 use Michelf\MarkdownExtra as Markdown;
 use Postmark\PostmarkClient;
 use Symfony\Component\Console\Command\Command;
@@ -108,8 +112,9 @@ class GenerateReleaseNotes extends Command {
             $outfile = "./out/{$gh_user}_{$gh_repo}.md";
         }
 
-        $client = new GithubClient(new CachedHttpClient(['cache_dir' => '/tmp/github-api-cache']));
-        $client->authenticate($token, GithubClient::AUTH_HTTP_TOKEN);
+        $client = new GithubClient();
+        $client->addCache(new FilesystemCachePool(new Filesystem(new Local('/tmp/github-api-cache'))));
+        $client->authenticate($token, AuthMethod::ACCESS_TOKEN);
 
         $git = new LocalGit($repo);
         $git->fetch();

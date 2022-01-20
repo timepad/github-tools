@@ -5,8 +5,12 @@
 
 namespace TpReleaseNotes\Command;
 
+use Cache\Adapter\Filesystem\FilesystemCachePool;
+use Github\AuthMethod;
 use Github\Client as GithubClient;
 use Github\HttpClient\CachedHttpClient;
+use League\Flysystem\Adapter\Local;
+use League\Flysystem\Filesystem;
 use Michelf\MarkdownExtra as Markdown;
 use Postmark\PostmarkClient;
 use Symfony\Component\Console\Command\Command;
@@ -76,8 +80,9 @@ class CreateRC extends Command {
 
         $outfile = "./out/rc.md";
 
-        $gh_client = new GithubClient(new CachedHttpClient(['cache_dir' => '/tmp/github-api-cache']));
-        $gh_client->authenticate($token, GithubClient::AUTH_HTTP_TOKEN);
+        $gh_client = new GithubClient();
+        $gh_client->addCache(new FilesystemCachePool(new Filesystem(new Local('/tmp/github-api-cache'))));
+        $gh_client->authenticate($token, AuthMethod::ACCESS_TOKEN);
 
         foreach ($github_repos as $repo) {
             $l("Processing $repo $rc_source_branch → $rc_target_branch");
