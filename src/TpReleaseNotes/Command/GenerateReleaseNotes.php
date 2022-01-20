@@ -281,8 +281,12 @@ class GenerateReleaseNotes extends Command {
         $truncate_minor = function($tag) {
             return Util::truncateMinorVersion($tag);
         };
-        $first_tag = $truncate_minor(array_shift(array_keys($tags_to_print)));
-        $last_tag = $truncate_minor(array_pop(array_keys($tags_to_print)));
+
+        $tag_keys = array_keys($tags_to_print);
+        $first_tag = $truncate_minor(array_shift($tag_keys));
+
+        $tag_keys = array_keys($tags_to_print);
+        $last_tag = $truncate_minor(array_pop($tag_keys));
 
         if ($tags_count == 1) {
             $subject = "Релиз{$title_append} $first_tag";
