@@ -59,6 +59,62 @@ class Client {
         }
     }
 
+    /**
+     * @return array
+     * @throws \GuzzleHttp\Exception\GuzzleException
+     */
+    public function getProjects($filter = null) {
+        $request = [
+            "fields"    => "id,name,shortName",
+        ];
+
+        if ($filter) {
+            $request["query"] = $filter;
+        }
+
+        $request = $this->client->get("admin/projects", ["query" => $request]);
+        $body_contents = $request->getBody()->getContents();
+
+        $result = [];
+
+        foreach (json_decode($body_contents, true) as $pr) {
+            $result[$pr['shortName']] = $pr;
+        }
+
+        return $result;
+    }
+
+    public function getProjectId($shortName) {
+        foreach ($this->getProjects($shortName) as $p) {
+            if ($p['shortName'] === $shortName) {
+                return $p['id'];
+            }
+        }
+
+        return null;
+    }
+
+    public function createIssue($projectShortName, $title, $text = "") {
+        $request = [
+            "fields"        => "id,description,summary,fields(projectCustomField(field(name)),value(name)),created",
+            "project"       => ["id" => $this->getProjectId($projectShortName)],
+            "summary"       => $title,
+            "description"   => $text,
+        ];
+
+        try {
+            $request = $this->client->post("api/issues", [\GuzzleHttp\RequestOptions::JSON => $request]);
+            $body_contents = $request->getBody()->getContents();
+            $response = json_decode($body_contents, true);
+
+            return $response;
+
+            //return new Issue($response["id"], json_decode($body_contents, true), $this);
+        } catch (\Throwable $e) {
+            return null;
+        }
+    }
+
     public function applyCommand($command, $issueIds = []) {
         $request = [
             "query"     => $command,
