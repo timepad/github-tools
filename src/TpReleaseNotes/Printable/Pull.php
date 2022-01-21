@@ -114,39 +114,65 @@ class Pull {
     }
 
     public function printSting($format = "mail") {
-        $result_strings = [];
-
         if ($format === "mail") {
-            $result_strings[] = "#### {$this->pull_title}";
-            $result_strings[] = "* Github: [#{$this->pull_id}]({$this->pull_url}) by @{$this->pull_author}  ";
+            return $this->printStingForMail();
         } elseif ($format === "tg") {
-            $result_strings[] = "🎈 {$this->pull_title}";
+            return $this->printStingForTg();
         }
+    }
+
+    public function printStingForMail() {
+        $result_strings = [];
+        $format = "mail";
+
+        $result_strings[] = "#### {$this->pull_title}";
+        $result_strings[] = "* Github: [#{$this->pull_id}]({$this->pull_url}) by @{$this->pull_author}  ";
 
         foreach ($this->yt_issues as $yti) {
-            if ($format === "mail") {
-                $result_strings[] = "* {$yti->printString($format)}  ";
-            } elseif ($format === "tg") {
-                $result_strings[] = "➡️ {$yti->printString($format)}";
-            }
+            $result_strings[] = "* {$yti->printString($format)}  ";
         }
 
         foreach ($this->zd_issues as $zdi) {
-            if ($format === "mail") {
-                $result_strings[] = "* {$zdi->printString($format)}  ";
-            } elseif ($format === "tg") {
-                $result_strings[] = "➡️ {$zdi->printString($format)}  ";
-            }
+            $result_strings[] = "* {$zdi->printString($format)}  ";
         }
 
-        if ($format === "mail") {
-            if ($this->pull_prelude) {
-                $result_strings[] = "";
-                $result_strings[] = $this->pull_prelude;
-                $result_strings[] = "";
-            }
+        if ($this->pull_prelude) {
+            $result_strings[] = "";
+            $result_strings[] = $this->pull_prelude;
+            $result_strings[] = "";
+        }
 
-            $result_strings[] = $this->pull_notes;
+        $result_strings[] = $this->pull_notes;
+
+        return implode("\n", $result_strings);
+    }
+
+    public function printStingForTg() {
+        $result_strings = [];
+        $format = "tg";
+
+        $result_strings[] = "🎈 {$this->pull_title}";
+
+        foreach ($this->yt_issues as $yti) {
+            $result_strings[] = "➡️ {$yti->printString($format)}";
+        }
+
+        foreach ($this->zd_issues as $zdi) {
+            $result_strings[] = "➡️ {$zdi->printString($format)}  ";
+        }
+
+        return implode("\n", $result_strings);
+    }
+
+    public function printStingForTracker() {
+        $result_strings = [];
+        $format = "mail";
+
+        $result_strings[] = "## {$this->pull_title}";
+        $result_strings[] = "Github: [#{$this->pull_id}]({$this->pull_url})";
+
+        foreach ($this->yt_issues as $yti) {
+            $result_strings[] = "* {$yti->printString($format)}  ";
         }
 
         return implode("\n", $result_strings);
