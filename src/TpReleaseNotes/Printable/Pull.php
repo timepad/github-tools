@@ -39,13 +39,13 @@ class Pull {
      * @param array $pull
      * @param \TpReleaseNotes\Youtrack\Client $yt_client
      * @param \Zendesk\API\HttpClient $zd_client
-     * @param OutputInterface $logger
+     * @param Callable $logger
      * @return Pull
      */
     public static function createFromGHPull($pull, $yt_client = null, $zd_client = null, $logger = null) {
         $l = function ($msg) use ($logger) {
-            if ($logger) {
-                $logger->writeln($msg);
+            if (is_callable($logger)) {
+                $logger($msg);
             }
         };
 
@@ -168,12 +168,13 @@ class Pull {
         $result_strings = [];
         $format = "mail";
 
-        $result_strings[] = "## {$this->pull_title}";
-        $result_strings[] = "Github: [#{$this->pull_id}]({$this->pull_url})";
+        $result_strings[] = "### [#{$this->pull_id}]({$this->pull_url}) {$this->pull_title}";
 
         foreach ($this->yt_issues as $yti) {
             $result_strings[] = "* {$yti->printString($format)}  ";
         }
+
+        $result_strings[] = "";
 
         return implode("\n", $result_strings);
     }

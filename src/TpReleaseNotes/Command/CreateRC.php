@@ -18,6 +18,7 @@ use TpReleaseNotes\Github\CommitsExtrasClient;
 use TpReleaseNotes\Github\PrAggregated;
 use TpReleaseNotes\Printable\Pull;
 use TpReleaseNotes\Youtrack\Client as YTClient;
+use TpReleaseNotes\Youtrack\Issue;
 
 class CreateRC extends Command {
     public function configure() {
@@ -56,7 +57,13 @@ class CreateRC extends Command {
      */
     protected $yt_client;
 
-    protected $yt_issue = null;
+    protected $yt_issue_id = null;
+
+    /** @var Issue */
+    protected $yt_issue_obj = null;
+
+    /** @var string */
+    protected $yt_issue_name = null;
 
     /** @var string */
     protected $rc_source_branch;
@@ -91,6 +98,7 @@ class CreateRC extends Command {
         $yt_project = $input->getOption('yt_project');
 
         $this->rc_id = $input->getOption('rc_id');
+        $this->yt_issue_name = "Релиз-кандидат {$this->rc_id}";
 
         $this->rc_source_branch = $input->getOption('rc_source_branch');
         $this->rc_target_branch = $input->getOption('rc_target_branch');
@@ -128,30 +136,68 @@ class CreateRC extends Command {
             $rc_prs[$repo] = $rc_pr;
         }
 
+        $printable_child_prs = [];
+        foreach ($rc_prs as $rc_pr) {
+            foreach ($rc_pr->children as $rcc_pr) {
+                $printable_child_prs[] = Pull::createFromGHPull($rcc_pr->pr_object, $this->yt_client, null);
+            }
+        }
+
+        if ($this->yt_client) {
+            $yt_text = "# PR:\n";
+            foreach ($this->github_repos as $repo) {
+                $yt_text .= "{$repo}: ";
+
+                if ($rc_prs[$repo]) {
+                    $yt_text .= $rc_prs[$repo]->url;
+                } else {
+                    $yt_text .= "—";
+                }
+
+                $yt_text .= "\n";
+            }
+
+            $yt_text .= "# Изменения:\n";
+            foreach ($printable_child_prs as $pcc) {
+                $yt_text .= $pcc->printStingForTracker() . "\n";
+            }
+
+            if (!$this->yt_issue_id) {
+                $l("Creating new YT issue in $yt_project");
+
+                $this->yt_issue_obj = $this->yt_client->createIssue($yt_project, $this->yt_issue_name, $yt_text);
+
+                $this->yt_issue_id = $this->yt_issue_obj->id;
+            } else {
+                $this->yt_issue_obj = $this->yt_client->updateIssue($this->yt_issue_id, ["description" => $yt_text]);
+            }
+
+            $l("YT issue: {$this->yt_issue_obj->getUrl()}");
+        }
+
         foreach ($rc_prs as $repo => $rc_pr) {
             $pr_body = "Релиз кандидат содержит следующие изменения в {$this->rc_source_branch} относительно {$this->rc_target_branch}:\n";
 
             foreach ($rc_pr->children as $rcc_pr) {
                 $l("$repo RC PR #{$rcc_pr["number"]} {$rcc_pr["title"]} {$rcc_pr["html_url"]}");
 
-                $pr_printable = Pull::createFromGHPull($rcc_pr->pr_object, $this->yt_client, null, $output);
+                $pr_printable = Pull::createFromGHPull($rcc_pr->pr_object, $this->yt_client, null);
                 $pr_body .= $pr_printable->printStingForTracker() . "\n";
+            }
+
+            if ($this->yt_issue_obj) {
+                $pr_body .= "\n\n{$this->yt_issue_obj->getUrl()}\n";
             }
 
             $this->gh_client->pr()->update($this->gh_user, $repo, $rc_pr->number, [
                 "body" => $pr_body
             ]);
 
-            $l("break");
+            $l("Updated desc of {$rc_pr->url}");
+
         }
 
-
-        if ($this->yt_client) {
-            if (!$this->yt_issue) {
-
-            }
-        }
-
+        $l("done");
     }
 
     protected function createOrFindPullForRC($repo) : ?PrAggregated {
@@ -190,11 +236,13 @@ class CreateRC extends Command {
             if (count($pr_candidates)) {
                 $pr_object = new PrAggregated($pr_candidates[0]);
 
-                if ($this->yt_client && !$this->yt_issue) {
-                    $rc_pr_printable = Pull::createFromGHPull($pr_object->pr_object, $this->yt_client, null, $this->output);
+                if ($this->yt_client && !$this->yt_issue_id) {
+                    $rc_pr_printable = Pull::createFromGHPull($pr_object->pr_object, $this->yt_client, null);
 
-                    if (count($rc_pr_printable->yt_issues)) {
-                        $yt_issue = $rc_pr_printable->yt_issues[0]->yt_id;
+                    foreach ($rc_pr_printable->yt_issues as $yti) {
+                        if ($yti->yt_title === $this->yt_issue_name) {
+                            $this->yt_issue_id = $yti->yt_id;
+                        }
                     }
                 }
             } else {

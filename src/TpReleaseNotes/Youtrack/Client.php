@@ -95,24 +95,36 @@ class Client {
     }
 
     public function createIssue($projectShortName, $title, $text = "") {
-        $request = [
-            "fields"        => "id,description,summary,fields(projectCustomField(field(name)),value(name)),created",
+        $r = [
             "project"       => ["id" => $this->getProjectId($projectShortName)],
             "summary"       => $title,
             "description"   => $text,
         ];
 
-        try {
-            $request = $this->client->post("api/issues", [\GuzzleHttp\RequestOptions::JSON => $request]);
-            $body_contents = $request->getBody()->getContents();
-            $response = json_decode($body_contents, true);
+        $query = [
+            "fields" => "numberInProject,description,summary,fields(projectCustomField(field(name)),value(name)),created",
+        ];
 
-            return $response;
+        $request = $this->client->post("issues", [\GuzzleHttp\RequestOptions::JSON => $r, "query" => $query]);
 
-            //return new Issue($response["id"], json_decode($body_contents, true), $this);
-        } catch (\Throwable $e) {
-            return null;
-        }
+        $body_contents = $request->getBody()->getContents();
+        $response = json_decode($body_contents, true);
+
+        $issue_code = "{$projectShortName}-{$response["numberInProject"]}";
+
+        return new Issue($issue_code, json_decode($body_contents, true), $this);
+    }
+
+    public function updateIssue($issueId, $r) {
+        $query = [
+            "fields" => "numberInProject,description,summary,fields(projectCustomField(field(name)),value(name)),created",
+        ];
+
+        $request = $this->client->post("issues/$issueId", [\GuzzleHttp\RequestOptions::JSON => $r, "query" => $query]);
+        $body_contents = $request->getBody()->getContents();
+        $response = json_decode($body_contents, true);
+
+        return new Issue($issueId, json_decode($body_contents, true), $this);
     }
 
     public function applyCommand($command, $issueIds = []) {
