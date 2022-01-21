@@ -8,25 +8,15 @@ namespace TpReleaseNotes\Command;
 use Cache\Adapter\Filesystem\FilesystemCachePool;
 use Github\AuthMethod;
 use Github\Client as GithubClient;
-use Github\HttpClient\CachedHttpClient;
 use League\Flysystem\Adapter\Local;
 use League\Flysystem\Filesystem;
-use Michelf\MarkdownExtra as Markdown;
-use Postmark\PostmarkClient;
 use Symfony\Component\Console\Command\Command;
-use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
-use TpReleaseNotes\LocalGit\LocalGit;
-use TpReleaseNotes\LocalGit\Tag;
-use TpReleaseNotes\Util;
-use TpReleaseNotes\Printable\Tag as PrintableTag;
-use TpReleaseNotes\Printable\Pull as PrintablePull;
-use TpReleaseNotes\Printable\YtIssue as PrintableYtIssue;
+use TpReleaseNotes\Github\CommitsExtrasClient;
+use TpReleaseNotes\Printable\Pull;
 use TpReleaseNotes\Youtrack\Client as YTClient;
-use TpReleaseNotes\Printable\ZdIssue as ZdPrintable;
-use Zendesk\API\HttpClient as ZendeskAPI;
 
 class CreateRC extends Command {
     public function configure() {
@@ -42,6 +32,8 @@ class CreateRC extends Command {
 
                 new InputOption('rc_source_branch', null, InputOption::VALUE_OPTIONAL, 'RC source branch', "master-dev"),
                 new InputOption('rc_target_branch', null, InputOption::VALUE_OPTIONAL, 'RC target branch', "master"),
+
+                new InputOption('rc_id', null, InputOption::VALUE_REQUIRED, 'Number, tag or something naming the RC'),
             ]
         )
             ->setDescription('Генерит релизноутсы');
@@ -58,6 +50,8 @@ class CreateRC extends Command {
         $yt_host    = $input->getOption('yt_host');
         $yt_project = $input->getOption('yt_project');
 
+        $rc_id = $input->getOption('rc_id');
+
         $rc_source_branch = $input->getOption('rc_source_branch');
         $rc_target_branch = $input->getOption('rc_target_branch');
 
@@ -65,7 +59,7 @@ class CreateRC extends Command {
             $output->writeln($msg);
         };
 
-        $rc_branch_name = "test_rc";
+        $rc_branch_name = "test_rc_$rc_id";
 
         /** @var YTClient $yt_client */
         $yt_client = null;
@@ -81,7 +75,9 @@ class CreateRC extends Command {
         $outfile = "./out/rc.md";
 
         $gh_client = new GithubClient();
-        $gh_client->addCache(new FilesystemCachePool(new Filesystem(new Local('/tmp/github-api-cache'))));
+        $cache_pool = new FilesystemCachePool(new Filesystem(new Local('/tmp/github-api-cache')));
+        $cache_pool->setFolder($rc_id);
+        $gh_client->addCache($cache_pool);
         $gh_client->authenticate($token, AuthMethod::ACCESS_TOKEN);
 
         foreach ($github_repos as $repo) {
@@ -97,7 +93,7 @@ class CreateRC extends Command {
 
             $l("$repo $rc_source_branch → $rc_target_branch: $compare_status");
 
-            if ($compare_status === "diverged") {
+            if (in_array($compare_status, ["diverged", "ahead"])) {
                 // create rc branch if not exists
                 $pr_ref = null;
 
@@ -106,7 +102,7 @@ class CreateRC extends Command {
                     $pr_ref = $gh_client->git()->references()->show($gh_user, $repo, "heads/$rc_branch_name");
                 } catch (\Github\Exception\RuntimeException $ge) {
                     // https://stackoverflow.com/a/9513594
-                    $l("$repo welp... creating branch for pr named $rc_branch_name");
+                    $l("$repo welp... '{$ge->getMessage()}', creating branch for pr named $rc_branch_name");
                     $pr_ref = $gh_client->git()->references()->create($gh_user, $repo, ["ref" => "refs/heads/$rc_branch_name", "sha" => $devmaster_sha]);
                 }
 
@@ -119,10 +115,11 @@ class CreateRC extends Command {
                     $pr_object = $pr_candidates[0];
                 } else {
                     $l("$repo welp... creating pr $rc_branch_name → $rc_target_branch");
+                    // https://docs.github.com/en/rest/reference/pulls#create-a-pull-request
                     $pr_object = $gh_client->pr()->create($gh_user, $repo, [
                         "base" => $rc_target_branch,
                         "head" => "$gh_user:$rc_branch_name",
-                        "title" => "Выпущен пакет изменений от $devmaster_sha",
+                        "title" => "Выпущен пакет изменений $rc_id",
                         "body" => "Тут будет ссылка на ютрек",
                     ]);
                 }
@@ -131,14 +128,76 @@ class CreateRC extends Command {
                 $pr_url = $pr_object["html_url"];
 
                 $l("$repo pr: $pr_url");
+
+                $extraClient = new CommitsExtrasClient($gh_client);
+
+                $get_prs_recursive = function($commits, &$result, $log_context) use (&$get_prs_recursive, $gh_client, $extraClient, $gh_user, $repo, $l) {
+                    foreach ($commits as $prc) {
+                        $l("$log_context analyzing commit {$prc["sha"]} {$prc["commit"]["message"]}");
+
+                        // если это мерж коммит то не мудрим и просто идем в тот PR
+                        if (preg_match("!^Merge pull request #(?'pr'\d+)!siu", $prc["commit"]["message"], $matches)) {
+                            $l("$log_context It's a merge commit of pr #{$matches['pr']}");
+                            $prc_prs = [$gh_client->pr()->show($gh_user, $repo, $matches['pr'])];
+                        } else {
+                            // analyze PR contents https://docs.github.com/en/rest/reference/commits#list-pull-requests-associated-with-a-commit
+                            $l("$log_context Asking github");
+                            $prc_prs = $extraClient->commitPulls($gh_user, $repo, $prc["sha"], ["state" => "closed"]);
+                        }
+
+                        foreach ($prc_prs as $prc_pr) {
+                            $child_pr_number = $prc_pr["number"];
+                            $l("$log_context analyzing commit {$prc["sha"]} pr $child_pr_number {$prc_pr["title"]} {$prc_pr["html_url"]}");
+
+                            if ($prc_pr["state"] != "closed") {
+                                $l("$log_context analyzing commit {$prc["sha"]} pr $child_pr_number is not closed");
+                                continue;
+                            }
+
+                            if (array_key_exists($child_pr_number, $result)) {
+                                $l("$log_context analyzing commit {$prc["sha"]} pr $child_pr_number already analyzed");
+                                continue;
+                            }
+
+                            $result[$child_pr_number] = $prc_pr;
+
+                            $get_prs_recursive($gh_client->pullRequest()->commits($gh_user, $repo, $child_pr_number), $result, $log_context . "/$child_pr_number");
+
+                            if (preg_match("!^revert-(?'rpr'\d+)!siu", $prc_pr["head"]["ref"], $matches)) {
+                                $l("$log_context pr $child_pr_number is a revert of pr#{$matches['rpr']}, will analyze it too");
+
+                                $get_prs_recursive($gh_client->pullRequest()->commits($gh_user, $repo, $matches['rpr']), $result, $log_context . "/{$matches['rpr']}");
+                            }
+                        }
+                    }
+                };
+
+                $rc_prs = [];
+                $get_prs_recursive($compare_result["commits"], $rc_prs, "{$repo}/$pr_number");
+
+                $pr_body = "Релиз кандидат содержит следующие изменения в $rc_source_branch относительно $rc_target_branch:\n";
+
+                foreach ($rc_prs as $rc_pr) {
+                    $l("$repo RC PR #{$rc_pr["number"]} {$rc_pr["title"]} {$rc_pr["html_url"]}");
+
+                    $pr_printable = Pull::createFromGHPull($rc_pr, $yt_client, null, $output);
+                    $pr_body .= $pr_printable->printStingForTracker() . "\n";
+
+                    //$pr_body .= "* #{$rc_pr["number"]}\n";
+                }
+
+                $gh_client->pr()->update($gh_user, $repo, $pr_number, [
+                    "body" => $pr_body
+                ]);
+
+                $l("break");
             }
 
-            // create pr https://docs.github.com/en/rest/reference/pulls#create-a-pull-request
+            //
+
             // analyze PR contents https://docs.github.com/en/rest/reference/commits#list-pull-requests-associated-with-a-commit
             // export to gh and yt
         }
-
-
 
 
         //file_put_contents($outfile, $release_notes);
