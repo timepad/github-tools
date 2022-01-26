@@ -107,7 +107,7 @@ class CreateRC extends Command {
 
         $l = function ($msg) { $this->log($msg); };
 
-        $this->rc_branch_name = "test_rc_{$this->rc_id}";
+        $this->rc_branch_name = "rc_{$this->rc_id}";
 
         $this->yt_client = null;
 
