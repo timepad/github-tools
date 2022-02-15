@@ -303,10 +303,7 @@ class GenerateReleaseNotes extends Command {
             $output->writeln("Preparing TG message");
 
             try {
-                $bot        = new \TelegramBot\Api\BotApi($tg_token);
-                if ($tg_proxy) {
-                    $bot->setCurlOption(CURLOPT_PROXY, $tg_proxy);
-                }
+                $client = new \TpReleaseNotes\Telegram\Client($tg_token, $tg_proxy, function($msg) use ($output) { $output->writeln($msg); });
 
                 $tg_message = [];
 
@@ -322,14 +319,7 @@ class GenerateReleaseNotes extends Command {
 
                 $tg_message_text = implode("\n", $tg_message) . "\n";
 
-                foreach ($tg_chats as $tg_chat) {
-                    $output->writeln("Sending TG message to $tg_chat");
-                    try {
-                        $bot->sendMessage("-{$tg_chat}", $tg_message_text);
-                    } catch (\Exception $e) {
-                        $output->writeln("TG to $tg_chat failed: {$e->getMessage()}");
-                    }
-                }
+                $client->sendMessage($tg_message_text, $tg_chats);
             } catch (\Exception $e) {
                 $output->writeln("TG failed: {$e->getMessage()}");
             }

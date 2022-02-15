@@ -36,6 +36,10 @@ class CreateRC extends Command {
                 new InputOption('rc_target_branch', null, InputOption::VALUE_OPTIONAL, 'RC target branch', "master"),
 
                 new InputOption('rc_id', null, InputOption::VALUE_REQUIRED, 'Number, tag or something naming the RC'),
+
+                new InputOption('tg_token', false, InputOption::VALUE_OPTIONAL, 'Telegram bot token'),
+                new InputOption('tg_chats', false, InputOption::VALUE_OPTIONAL, 'Telegram bot chat ids (space separated)'),
+                new InputOption('tg_proxy', false, InputOption::VALUE_OPTIONAL, 'Telegram proxy'),
             ]
         )
             ->setDescription('Генерит релизноутсы');
@@ -102,6 +106,8 @@ class CreateRC extends Command {
 
         $this->rc_source_branch = $input->getOption('rc_source_branch');
         $this->rc_target_branch = $input->getOption('rc_target_branch');
+
+        $tg_token   = $input->getOption('tg_token');
 
         $this->output = $output;
 
@@ -195,6 +201,18 @@ class CreateRC extends Command {
 
             $l("Updated desc of {$rc_pr->url}");
 
+        }
+
+        if ($tg_token && $this->yt_issue_obj) {
+            $tg_chats   = explode(" ", $input->getOption('tg_chats'));
+            $tg_proxy   = $input->getOption('tg_proxy');
+
+            try {
+                $tgClient = new \TpReleaseNotes\Telegram\Client($tg_token, $tg_proxy, $l);
+                $tgClient->sendMessage("🎁 Сгенерирован новый RC: {$this->yt_issue_obj->getUrl()}", $tg_chats);
+            } catch (\Exception $e) {
+                $l("TG error: " . $e->getMessage());
+            }
         }
 
         $l("done");
@@ -321,6 +339,8 @@ class CreateRC extends Command {
             $rc_pr->children[] = new PrAggregated($rc_contents_pr);
         }
     }
+
+
 
     protected function log($msg) {
         $this->output->writeln($msg);
