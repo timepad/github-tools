@@ -28,7 +28,6 @@ function tag_existing() {
   echo "result $exist"
 }
 
-# shellcheck disable=SC1009
 function generate_release() {
   echo "generate_release"
   gh auth login --with-token < ~/.config/gh/token
