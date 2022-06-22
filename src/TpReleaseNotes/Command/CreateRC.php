@@ -220,7 +220,7 @@ class CreateRC extends Command {
 
     protected function createOrFindPullForRC($repo) : ?PrAggregated {
         $l = function ($msg) use ($repo) { $this->log("[{$repo}] $msg"); };
-
+        $l("show {$repo}");
         $l("processing {$this->rc_source_branch} → {$this->rc_target_branch}");
 
         $gh_source_ref = $this->gh_client->git()->references()->show($this->gh_user, $repo, "heads/{$this->rc_source_branch}");
