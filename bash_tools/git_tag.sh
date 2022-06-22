@@ -1,6 +1,6 @@
 #!/bin/bash
 #on agent should be
-# preinstalled gh
+# installed gh
 # added github token to ~/.config/gh/token
 
 version=$(git describe --abbrev=0 --tags)
