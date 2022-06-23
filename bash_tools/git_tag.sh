@@ -1,6 +1,6 @@
 #!/bin/bash
 #on agent should be
-# installed gh
+# preinstalled gh
 # added github token to ~/.config/gh/token
 
 version=$(git describe --abbrev=0 --tags)
@@ -13,7 +13,7 @@ repo_full_name=$(git config --get remote.origin.url | sed 's/.*:\/\/github.com\/
 repo_name_l=(${repo_full_name//:/ })
 repo_name=${repo_name_l[1]}
 
-function generate_new_tag(){
+function generate_new_tagname(){
   version_bits=(${version//./ })
   first_bit=${version_bits[0]}
   last_bit=${version_bits[1]}
@@ -24,29 +24,36 @@ function generate_new_tag(){
 function tag_existing() {
   git_commit=$(git rev-parse HEAD)
   echo $git_commit
-  exist=$(git describe --contains $git_commit 2>/dev/null)
-  echo "result $exist"
+  exist=$(git describe --contains $git_commit)
 }
+
 
 function generate_release() {
   echo "generate_release"
   gh auth login --with-token < ~/.config/gh/token
+  echo "  gh api --method POST \
+  -H \"Accept: application/vnd.github.v3+json\" /repos/$repo_name/releases \
+  -f tag_name=$new_tag \
+  -f target_commitish=$branch \
+  -f name=\"$release_name\" \
+  -f body=\"$release_text\""
   gh api --method POST \
   -H "Accept: application/vnd.github.v3+json" /repos/$repo_name/releases \
   -f tag_name=$new_tag \
   -f target_commitish=$branch \
   -f name="$release_name" \
-  -f body="$release_text"
+  -f body="$release_text" || true
 }
 
-generate_new_tag
-echo "Check if $new_tag is existing"
+echo "Check if $version is existing"
 tag_existing
-echo $exist
 
-if [ -z "$exist" ];
+if [[ "$exist" = "version" ]];
 then
-  generate_release
-else
   echo "Tag already exists"
+  echo "##teamcity[setParameter name='system.release_tag' value='$version']"
+else
+   generate_new_tagname
+   generate_release
+   echo "##teamcity[setParameter name='system.release_tag' value='$new_tag']"
 fi
